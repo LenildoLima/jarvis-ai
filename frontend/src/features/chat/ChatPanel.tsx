@@ -18,6 +18,7 @@ export function ChatPanel() {
   const thinking = useChatStore((s) => s.thinking);
   const loadingMessages = useChatStore((s) => s.loadingMessages);
   const send = useChatStore((s) => s.send);
+  const socketStatus = useChatStore((s) => s.socketStatus);
   const setStatus = useAssistantStore((s) => s.setStatus);
   const setAmplitude = useAssistantStore((s) => s.setAmplitude);
   const setCaption = useAssistantStore((s) => s.setCaption);
@@ -56,6 +57,9 @@ export function ChatPanel() {
     }
     setStatus("idle");
   }
+
+  const isConnected = socketStatus === "connected";
+  const isConnecting = socketStatus === "connecting";
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -142,7 +146,14 @@ export function ChatPanel() {
               }
             }}
             rows={1}
-            placeholder="Fale ou digite um comando..."
+            disabled={thinking}
+            placeholder={
+              isConnected
+                ? "Fale ou digite um comando..."
+                : isConnecting
+                ? "Conectando ao núcleo de IA..."
+                : "Desconectado. Reconectando automaticamente..."
+            }
             className="max-h-32 min-h-10 resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0"
           />
 
@@ -152,7 +163,7 @@ export function ChatPanel() {
             size="icon"
             className="size-10 shrink-0 rounded-full"
             aria-label="Enviar mensagem"
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || thinking}
             onClick={() => void submit(draft)}
           >
             <SendHorizonal className="size-4" />
@@ -164,7 +175,8 @@ export function ChatPanel() {
             <button
               key={chip}
               onClick={() => void submit(chip)}
-              className="rounded-full border border-border/60 bg-secondary/30 px-3 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+              disabled={thinking}
+              className="rounded-full border border-border/60 bg-secondary/30 px-3 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-50"
             >
               {chip}
             </button>

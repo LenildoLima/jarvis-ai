@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
+import { MetricsBar } from "@/components/MetricsBar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { OfflineOverlay } from "@/components/OfflineOverlay";
 import { useRealtimeConnection } from "@/hooks/useRealtimeConnection";
@@ -15,6 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar />
       <div className="relative flex min-w-0 flex-1 flex-col">
         <Topbar />
+        <MetricsBar />
         <motion.main
           className="min-h-0 flex-1 overflow-hidden"
           initial={{ opacity: 0, y: 8 }}

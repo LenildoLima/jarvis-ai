@@ -1,15 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
-import { Activity, Cpu, Gauge, HardDrive, MemoryStick, Thermometer, Wifi } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Splash } from "@/components/Splash";
 import { AIOrb } from "@/components/AIOrb";
-import { StatusCard } from "@/components/StatusCard";
-import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { ConversationList } from "@/features/chat/ConversationList";
 import { ChatPanel } from "@/features/chat/ChatPanel";
 import { useUIStore } from "@/store/uiStore";
-import { useSystemStore } from "@/store/systemStore";
 import { mockUser } from "@/mock/data";
 
 export const Route = createFileRoute("/")({
@@ -42,7 +38,6 @@ function greeting() {
 function Dashboard() {
   const booted = useUIStore((s) => s.booted);
   const setBooted = useUIStore((s) => s.setBooted);
-  const stats = useSystemStore((s) => s.stats);
 
   if (!booted) {
     return (
@@ -54,7 +49,7 @@ function Dashboard() {
 
   return (
     <AppShell>
-      <div className="grid h-full grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_290px]">
+      <div className="grid h-full grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="hidden min-h-0 lg:block">
           <ConversationList />
         </div>
@@ -73,27 +68,6 @@ function Dashboard() {
             <ChatPanel />
           </div>
         </section>
-
-        <aside className="hidden min-h-0 flex-col gap-3 overflow-y-auto border-l border-border/60 bg-sidebar/30 p-4 backdrop-blur-md lg:flex">
-          <h2 className="font-display text-xs tracking-[0.3em] text-muted-foreground uppercase">
-            Sistema
-          </h2>
-          {!stats ? (
-            <LoadingSkeleton rows={6} />
-          ) : (
-            <>
-              <StatusCard metric={stats.cpu} icon={Cpu} accent="neon" compact />
-              <StatusCard metric={stats.ram} icon={MemoryStick} accent="cyan" compact />
-              <StatusCard metric={stats.gpu} icon={Gauge} accent="violet" compact />
-              <StatusCard metric={stats.temperature} icon={Thermometer} accent="cyan" compact />
-              <StatusCard metric={stats.disk} icon={HardDrive} accent="neon" compact />
-              <StatusCard metric={stats.network} icon={Wifi} accent="violet" compact />
-              <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <Activity className="size-3 text-cyan" /> Telemetria simulada · atualiza a cada 3s
-              </p>
-            </>
-          )}
-        </aside>
       </div>
     </AppShell>
   );

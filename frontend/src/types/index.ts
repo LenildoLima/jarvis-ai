@@ -50,7 +50,7 @@ export interface Plugin {
 
 export interface Metric {
   label: string;
-  value: number;
+  value: number | null;
   unit: string;
   detail?: string;
   history: number[];
