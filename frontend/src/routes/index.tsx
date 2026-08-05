@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
 import { AppShell } from "@/components/AppShell";
 import { Splash } from "@/components/Splash";
@@ -6,18 +6,18 @@ import { AIOrb } from "@/components/AIOrb";
 import { ConversationList } from "@/features/chat/ConversationList";
 import { ChatPanel } from "@/features/chat/ChatPanel";
 import { useUIStore } from "@/store/uiStore";
-import { mockUser } from "@/mock/data";
+import { useAuthStore } from "@/store/authStore";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "NOVA — Núcleo do assistente de IA" },
+      { title: "BELL — Núcleo do assistente de IA" },
       {
         name: "description",
         content:
           "Interface HUD futurista para um assistente pessoal de IA: núcleo neural, chat por voz e telemetria do sistema em tempo real.",
       },
-      { property: "og:title", content: "NOVA — Núcleo do assistente de IA" },
+      { property: "og:title", content: "BELL — Núcleo do assistente de IA" },
       {
         property: "og:description",
         content: "Painel HUD com orb neural, chat por voz e telemetria do sistema.",
@@ -38,6 +38,19 @@ function greeting() {
 function Dashboard() {
   const booted = useUIStore((s) => s.booted);
   const setBooted = useUIStore((s) => s.setBooted);
+  const { user, isLoading } = useAuthStore();
+
+  if (isLoading) {
+    return (
+      <AnimatePresence>
+        <Splash onDone={() => {}} />
+      </AnimatePresence>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" />;
+  }
 
   if (!booted) {
     return (
@@ -58,7 +71,7 @@ function Dashboard() {
           <div className="flex flex-col items-center justify-center px-6 pt-6 pb-2">
             <AIOrb size={210} />
             <h1 className="mt-4 font-display text-xl">
-              {greeting()}, {mockUser.name}.
+              {greeting()}, {user.name}.
             </h1>
             <p className="mt-1 text-xs text-muted-foreground">
               Bem-vindo de volta. Todos os sistemas operando normalmente.

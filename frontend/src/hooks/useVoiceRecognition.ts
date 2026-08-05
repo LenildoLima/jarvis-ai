@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { useWakeWordStore } from "@/store/wakeWordStore";
 
 type SpeechRecognitionLike = {
   lang: string;
@@ -29,14 +30,18 @@ export function useVoiceRecognition(onTranscript: (text: string) => void) {
     ref.current?.stop();
     ref.current = null;
     setListening(false);
+    useWakeWordStore.getState().setManualMicActive(false);
   }, []);
 
   const start = useCallback(() => {
+    useWakeWordStore.getState().setManualMicActive(true);
+    
     const recognition = getRecognition();
     if (!recognition) {
       setListening(true);
       setTimeout(() => {
         setListening(false);
+        useWakeWordStore.getState().setManualMicActive(false);
         onTranscript("Como está o desempenho do sistema agora?");
       }, 2200);
       return;
@@ -48,7 +53,14 @@ export function useVoiceRecognition(onTranscript: (text: string) => void) {
       const transcript = event.results[0]?.[0]?.transcript ?? "";
       if (transcript) onTranscript(transcript);
     };
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      useWakeWordStore.getState().setManualMicActive(false);
+    };
+    (recognition as any).onerror = () => {
+      setListening(false);
+      useWakeWordStore.getState().setManualMicActive(false);
+    };
     ref.current = recognition;
     recognition.start();
     setListening(true);

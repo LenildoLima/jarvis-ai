@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # Tavily (busca real na web, usada via function calling)
     TAVILY_API_KEY: str
 
+    # Supabase (autenticação e persistência de conversas/mensagens)
+    SUPABASE_URL: str
+    SUPABASE_SERVICE_KEY: str
+
     # CORS — endereço onde o frontend roda localmente
     FRONTEND_ORIGIN: str = "http://localhost:5173"
 

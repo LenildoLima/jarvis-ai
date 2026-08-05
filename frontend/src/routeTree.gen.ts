@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as PluginsRouteImport } from './routes/plugins'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -18,6 +19,11 @@ import { Route as SystemRouteImport } from './routes/system'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoryRoute = MemoryRouteImport.update({
@@ -43,6 +49,7 @@ const SystemRoute = SystemRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/memory': typeof MemoryRoute
   '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/memory': typeof MemoryRoute
   '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/memory': typeof MemoryRoute
   '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
@@ -65,14 +74,22 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/memory' | '/plugins' | '/settings' | '/system'
+  fullPaths: '/' | '/auth' | '/memory' | '/plugins' | '/settings' | '/system'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/memory' | '/plugins' | '/settings' | '/system'
-  id: '__root__' | '/' | '/memory' | '/plugins' | '/settings' | '/system'
+  to: '/' | '/auth' | '/memory' | '/plugins' | '/settings' | '/system'
+  id:
+    | '__root__'
+    | '/'
+    | '/auth'
+    | '/memory'
+    | '/plugins'
+    | '/settings'
+    | '/system'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRoute
   MemoryRoute: typeof MemoryRoute
   PluginsRoute: typeof PluginsRoute
   SettingsRoute: typeof SettingsRoute
@@ -86,6 +103,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memory': {
@@ -121,6 +145,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthRoute: AuthRoute,
   MemoryRoute: MemoryRoute,
   PluginsRoute: PluginsRoute,
   SettingsRoute: SettingsRoute,

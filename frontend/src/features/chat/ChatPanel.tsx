@@ -7,6 +7,7 @@ import { VoiceButton } from "@/features/voice/VoiceButton";
 import { useChatStore } from "@/store/chatStore";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
+import { useContinuousListening } from "@/hooks/useContinuousListening";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { SUGGESTION_CHIPS } from "@/config/env";
 import { cn } from "@/lib/utils";
@@ -22,7 +23,10 @@ export function ChatPanel() {
   const setStatus = useAssistantStore((s) => s.setStatus);
   const setAmplitude = useAssistantStore((s) => s.setAmplitude);
   const setCaption = useAssistantStore((s) => s.setCaption);
-  const { speak, caption, speaking } = useTextToSpeech();
+  const isSubmittingRef = useRef(false);
+  // useContinuousListening direto aqui para ter acesso ao stopMicRef e passá-lo ao TTS
+  const { stopMicRef } = useContinuousListening((text: string) => void submit(text));
+  const { speak, caption, speaking } = useTextToSpeech(stopMicRef);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -47,15 +51,25 @@ export function ChatPanel() {
   async function submit(text: string) {
     const content = text.trim();
     if (!content) return;
+    // Guard contra chamadas concorrentes (evita que loop de feedback trave o estado thinking)
+    if (isSubmittingRef.current) {
+      console.log("[ChatPanel] submit ignorado — já existe uma requisição em andamento.");
+      return;
+    }
+    isSubmittingRef.current = true;
     setDraft("");
     setStatus("processing");
-    const reply = await send(content);
-    inputRef.current?.focus();
-    if (reply) {
-      setStatus("speaking");
-      await speak(reply.content);
+    try {
+      const reply = await send(content);
+      inputRef.current?.focus();
+      if (reply) {
+        setStatus("speaking");
+        await speak(reply.content);
+      }
+    } finally {
+      isSubmittingRef.current = false;
+      setStatus("idle");
     }
-    setStatus("idle");
   }
 
   const isConnected = socketStatus === "connected";
@@ -108,6 +122,7 @@ export function ChatPanel() {
           </motion.div>
         )}
       </div>
+
 
       <AnimatePresence>
         {caption && (

@@ -8,46 +8,60 @@ from app.core.config import settings
 from app.services.search_service import web_search
 from app.services.weather_service import get_weather
 
-# ---------------------------------------------------------------------------
-# Logging — aparece no console onde o uvicorn está rodando
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Cliente Groq
-# ---------------------------------------------------------------------------
 _client = AsyncGroq(api_key=settings.GROQ_API_KEY)
 
-# ---------------------------------------------------------------------------
-# Personalidade da Nova — ajuste livremente aqui, sem mexer em mais nada
-# ---------------------------------------------------------------------------
-SYSTEM_PROMPT = (
-    "Você é a Nova, uma assistente de IA pessoal futurista. "
-    "Trate o usuário como 'Lenildo Lima'. Seja direta, útil e com um tom "
-    "levemente técnico, sem ser fria. Respostas curtas e naturais, "
-    "como se estivesse falando em voz alta.\n\n"
-    "Nunca apresente uma suposição como se fosse fato confirmado. "
-    "Se você não tiver informação confiável sobre algo — principalmente "
-    "eventos recentes, questões jurídicas, políticas ou envolvendo pessoas "
-    "reais — diga claramente que não tem certeza ou que a informação pode "
-    "estar desatualizada. Precisão e honestidade importam mais do que "
-    "parecer segura de si.\n\n"
-    "IMPORTANTE: suas respostas serão faladas em voz alta, não só lidas. "
-    "Por isso, nunca use formatação Markdown (nada de **negrito**, "
-    "*itálico*, listas com traços ou números, títulos com #, ou tabelas). "
-    "Escreva sempre em frases corridas e naturais, como uma pessoa "
-    "falaria em uma conversa — se precisar listar itens, faça isso "
-    "dentro do próprio texto (ex: 'primeiro... depois... e por fim...'), "
-    "nunca com marcadores visuais."
-)
 
-# ---------------------------------------------------------------------------
-# Definição das tools para o Groq
-# ---------------------------------------------------------------------------
+def _build_system_prompt(display_name: str) -> str:
+    """
+    Monta o prompt de sistema dinamicamente, usando o nome real do
+    usuário autenticado (vindo do perfil no Supabase), em vez de um
+    nome fixo no código.
+    """
+    return (
+        f"Você é a Bell, uma assistente de IA pessoal futurista. "
+        f"Trate o usuário como '{display_name}'. Seja direta, útil e com "
+        f"um tom levemente técnico, sem ser fria. Respostas curtas e "
+        f"naturais, como se estivesse falando em voz alta.\n\n"
+        "Nunca apresente uma suposição como se fosse fato confirmado. "
+        "Se você não tiver informação confiável sobre algo — principalmente "
+        "eventos recentes, questões jurídicas, políticas ou envolvendo pessoas "
+        "reais — diga claramente que não tem certeza ou que a informação pode "
+        "estar desatualizada. Precisão e honestidade importam mais do que "
+        "parecer segura de si.\n\n"
+        "IMPORTANTE: suas respostas serão faladas em voz alta, não só lidas. "
+        "Por isso, nunca use formatação Markdown (nada de **negrito**, "
+        "*itálico*, listas com traços ou números, títulos com #, ou tabelas). "
+        "Escreva sempre em frases corridas e naturais, como uma pessoa "
+        "falaria em uma conversa — se precisar listar itens, faça isso "
+        "dentro do próprio texto (ex: 'primeiro... depois... e por fim...'), "
+        "nunca com marcadores visuais.\n\n"
+        "Você TEM acesso real e permanente a duas ferramentas, disponíveis "
+        "em toda mensagem desta conversa, não apenas uma vez: busca na web "
+        "(web_search) e clima em tempo real (get_weather). Você já é capaz "
+        "de fazer isso agora mesmo, sempre que precisar — não é uma "
+        "funcionalidade hipotética nem algo que precisaria ser implementado. "
+        "Nunca diga que não consegue buscar informação em tempo real, que "
+        "só pode usar dados fornecidos anteriormente, ou explique como "
+        "'alguém implementaria' busca/clima como se você não tivesse isso — "
+        "você tem, e pode chamar essas ferramentas de novo a qualquer "
+        "momento, inclusive para confirmar ou atualizar uma resposta "
+        "anterior.\n\n"
+        "Ao usar web_search, sempre escolha o parâmetro recency com "
+        "cuidado: para situações em desenvolvimento contínuo (guerras, "
+        "conflitos, eleições, notícias do dia, resultados esportivos "
+        "recentes), use 'day' ou 'week' — nunca 'any' nesses casos, mesmo "
+        "que isso traga menos resultados. Buscar sem filtro de data nesse "
+        "tipo de assunto tende a trazer páginas antigas bem posicionadas "
+        "mas desatualizadas, o que já causou respostas erradas antes."
+    )
+
+
 _TOOLS = [
     {
         "type": "function",
@@ -65,9 +79,23 @@ _TOOLS = [
                     "query": {
                         "type": "string",
                         "description": "Consulta de busca em linguagem natural.",
-                    }
+                    },
+                    "recency": {
+                        "type": "string",
+                        "enum": ["day", "week", "month", "year", "any"],
+                        "description": (
+                            "Quão recente a informação precisa ser. Use 'day' ou "
+                            "'week' para situações em desenvolvimento contínuo "
+                            "(guerras, conflitos, eleições em andamento, notícias "
+                            "do dia, resultados esportivos recentes). Use 'month' "
+                            "para algo que muda com menor frequência mas ainda é "
+                            "dinâmico (cotações, rankings). Use 'any' apenas para "
+                            "fatos estáveis que não mudam com frequência (população "
+                            "histórica, dados de censo, fatos históricos)."
+                        ),
+                    },
                 },
-                "required": ["query"],
+                "required": ["query", "recency"],
             },
         },
     },
@@ -95,9 +123,6 @@ _TOOLS = [
     },
 ]
 
-# ---------------------------------------------------------------------------
-# Heurística de palavras-chave para forçar busca
-# ---------------------------------------------------------------------------
 _SEARCH_KEYWORDS = (
     "hoje", "agora", "atual", "atualmente", "recente", "recentes",
     "última", "último", "últimas", "últimos",
@@ -107,6 +132,8 @@ _SEARCH_KEYWORDS = (
     "partida", "partidas", "lançamento", "lançamentos", "novo", "nova",
     "novos", "novas", "aconteceu", "aconteceram",
     "quando foi", "quem ganhou", "quem venceu", "quem perdeu",
+    "campeão", "campeã", "campeões", "campeãs", "título", "títulos",
+    "vencedor", "vencedora", "final da", "finalista",
     "ranking", "rankings", "colocação", "colocações", "colocado",
     "colocada", "posição", "posições", "classificação", "classificações",
     "lugar no", "maior do", "menor do",
@@ -114,70 +141,46 @@ _SEARCH_KEYWORDS = (
 
 
 def _looks_like_factual_query(text: str) -> bool:
-    """Retorna True se a mensagem contiver palavras-chave que sugerem busca."""
     lowered = text.lower()
     return any(kw in lowered for kw in _SEARCH_KEYWORDS)
 
 
 def _strip_markdown(text: str) -> str:
-    """
-    Remove símbolos de Markdown que às vezes escapam da instrução do
-    SYSTEM_PROMPT (o modelo nem sempre obedece 100%). Como a resposta é
-    falada em voz alta, símbolos como ** ou # não podem chegar ao
-    frontend/TTS. Aplicado chunk a chunk durante o streaming — em casos
-    raros um "**" pode ficar dividido entre dois chunks e sobrar um "*"
-    solto, o que é um efeito colateral aceitável frente ao ganho geral.
-    """
     for symbol in ("**", "##", "#", "*", "`"):
         text = text.replace(symbol, "")
     return text
 
 
-# ---------------------------------------------------------------------------
-# Função principal de streaming
-# ---------------------------------------------------------------------------
 async def stream_chat_response(
     user_message: str,
     history: list[dict[str, str]] | None = None,
+    display_name: str = "Comandante",
 ) -> AsyncGenerator[str, None]:
     """
     Envia a mensagem do usuário para a Groq com suporte a tool calling.
-    Se o modelo (ou a heurística) decidir buscar na web, executa a busca
-    via Tavily e injeta o resultado antes de gerar a resposta final.
-
-    `history` é uma lista de mensagens anteriores no formato
-    [{"role": "user"|"assistant", "content": "..."}] — opcional.
+    `display_name` é o nome real do usuário autenticado (vem do perfil
+    no Supabase), usado para personalizar o SYSTEM_PROMPT dinamicamente.
     """
-    # --- LOG 1: mensagem recebida ---
     logger.info("Mensagem recebida do usuário: %r", user_message)
 
     force_search = _looks_like_factual_query(user_message)
-
-    # --- LOG 2: heurística ---
     logger.info("force_search (heurística de palavras-chave) = %s", force_search)
 
-    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system_prompt = _build_system_prompt(display_name)
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
     if history:
         messages.extend(history)
     messages.append({"role": "user", "content": user_message})
 
-    # Primeira chamada ao modelo (com tools disponíveis)
     try:
         first_response = await _client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=messages,
             tools=_TOOLS,
-            # "required" força ALGUMA tool quando a heurística dispara, mas
-            # deixa o modelo escolher entre web_search e get_weather.
             tool_choice="required" if force_search else "auto",
             stream=False,
         )
     except Exception as exc:
-        # A Groq rejeita com 400 quando tool_choice="required" mas o modelo
-        # julga que não precisa de nenhuma ferramenta (ex: pergunta de
-        # contexto que já dá pra responder com o histórico da conversa).
-        # Nesse caso, refazemos a chamada sem forçar, deixando o modelo
-        # decidir livremente.
         logger.info(
             "Chamada com tool_choice='required' falhou (%s) — "
             "tentando novamente com tool_choice='auto'.",
@@ -195,7 +198,6 @@ async def stream_chat_response(
     tool_calls = first_message.tool_calls or []
 
     if tool_calls:
-        # --- LOG 3: model chamou uma tool ---
         search_summaries: list[str] = []
         for tc in tool_calls:
             args = json.loads(tc.function.arguments)
@@ -211,21 +213,19 @@ async def stream_chat_response(
                 search_summaries.append(
                     f"Localização: {location}\nResultado:\n{tool_result}"
                 )
-
-            else:  # web_search (padrão)
+            else:
                 query = args.get("query", "")
+                recency = args.get("recency", "any")
                 logger.info(
-                    "Modelo chamou a tool 'web_search' com query: %r", query
+                    "Modelo chamou a tool 'web_search' com query: %r, recency: %r",
+                    query, recency,
                 )
-                tool_result = web_search(query)
+                tool_result = web_search(query, recency=recency)
                 logger.info("Resultado bruto da web_search: %s", tool_result)
                 search_summaries.append(
                     f"Query: {query}\nResultado:\n{tool_result}"
                 )
 
-        # Injeta os resultados como mensagem de sistema — sem usar o protocolo
-        # oficial tool_calls/role:"tool", que faria o modelo tentar usar tools
-        # de novo na chamada final (onde não há tools declaradas).
         context_text = "\n\n---\n\n".join(search_summaries)
         messages.append(
             {
@@ -237,13 +237,10 @@ async def stream_chat_response(
             }
         )
     else:
-        # --- LOG 5: nenhuma tool chamada ---
         logger.info(
             "Modelo NÃO chamou nenhuma tool — respondendo diretamente sem busca."
         )
 
-    # Resposta final em streaming — sem parâmetro tools para evitar que o modelo
-    # tente chamar ferramentas novamente.
     stream = await _client.chat.completions.create(
         model=settings.GROQ_MODEL,
         messages=messages,

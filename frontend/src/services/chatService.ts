@@ -1,6 +1,5 @@
 import { env } from "@/config/env";
-import type { Conversation, Message } from "@/types";
-import { delay, mockConversations, mockMessages } from "@/mock/data";
+import type { Message } from "@/types";
 
 class ChatWebSocketClient {
   private socket: WebSocket | null = null;
@@ -8,6 +7,7 @@ class ChatWebSocketClient {
   private statusListeners = new Set<(status: "connected" | "connecting" | "disconnected" | "error") => void>();
   private currentStatus: "connected" | "connecting" | "disconnected" | "error" = "disconnected";
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private currentToken: string | null = null;
 
   private updateStatus(status: "connected" | "connecting" | "disconnected" | "error") {
     this.currentStatus = status;
@@ -27,7 +27,9 @@ class ChatWebSocketClient {
     };
   }
 
-  public async getConnectedSocket(): Promise<WebSocket> {
+  public async getConnectedSocket(token: string): Promise<WebSocket> {
+    this.currentToken = token;
+
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       return this.socket;
     }
@@ -53,7 +55,7 @@ class ChatWebSocketClient {
     return new Promise<WebSocket>((resolve, reject) => {
       try {
         this.updateStatus("connecting");
-        const wsUrl = `${env.wsUrl}/chat`;
+        const wsUrl = `${env.wsUrl}/chat?token=${token}`;
         const socket = new WebSocket(wsUrl);
         this.socket = socket;
 
@@ -71,9 +73,15 @@ class ChatWebSocketClient {
           }
         };
 
-        socket.onclose = () => {
+        socket.onclose = (event) => {
           this.socket = null;
           this.updateStatus("disconnected");
+          
+          if (event.code === 4401) {
+             this.messageListeners.forEach((listener) => listener({ type: "error_4401" }));
+             return; // Do not auto reconnect if token is rejected
+          }
+          
           this.triggerReconnect();
         };
 
@@ -93,7 +101,9 @@ class ChatWebSocketClient {
     this.reconnectTimeout = setTimeout(async () => {
       this.reconnectTimeout = null;
       try {
-        await this.getConnectedSocket();
+        if (this.currentToken) {
+          await this.getConnectedSocket(this.currentToken);
+        }
       } catch (err) {
         console.error("Auto reconnect to Chat WS failed:", err);
         this.triggerReconnect();
@@ -108,56 +118,25 @@ class ChatWebSocketClient {
     };
   }
 
-  public async send(payload: any) {
-    const socket = await this.getConnectedSocket();
+  public async send(token: string, payload: any) {
+    const socket = await this.getConnectedSocket(token);
     socket.send(JSON.stringify(payload));
   }
 }
 
 export const chatWS = new ChatWebSocketClient();
 
-// Connect early — only in browser context (Vite SSR runs this in Node where window/WebSocket don't exist)
-if (typeof window !== "undefined") {
-  void chatWS.getConnectedSocket().catch((err) => {
-    console.warn("Could not connect to Chat WS initially, will retry when sending message:", err);
-  });
-}
-
 export interface ChatService {
-  listConversations(query?: string): Promise<Conversation[]>;
-  createConversation(): Promise<Conversation>;
-  listMessages(conversationId: string): Promise<Message[]>;
   sendMessage(
+    token: string,
     conversationId: string,
     content: string,
-    onEvent?: (event: { type: "start" | "chunk" | "end"; content?: string }) => void
+    onEvent?: (event: { type: "start" | "chunk" | "end" | "error_4401"; content?: string }) => void
   ): Promise<Message>;
 }
 
 export const chatService: ChatService = {
-  async listConversations(query = "") {
-    await delay(500);
-    const q = query.trim().toLowerCase();
-    if (!q) return mockConversations;
-    return mockConversations.filter(
-      (c) => c.title.toLowerCase().includes(q) || c.preview.toLowerCase().includes(q),
-    );
-  },
-  async createConversation() {
-    await delay(240);
-    return {
-      id: `cnv_${Math.random().toString(36).slice(2, 8)}`,
-      title: "Nova conversa",
-      preview: "Sem mensagens ainda",
-      updatedAt: new Date().toISOString(),
-      messageCount: 0,
-    };
-  },
-  async listMessages(conversationId) {
-    await delay(360);
-    return mockMessages.map((m) => ({ ...m, conversationId }));
-  },
-  async sendMessage(conversationId, content, onEvent) {
+  async sendMessage(token, conversationId, content, onEvent) {
     let fullResponse = "";
 
     return new Promise<Message>((resolve, reject) => {
@@ -180,10 +159,16 @@ export const chatService: ChatService = {
             content: fullResponse,
             createdAt: new Date().toISOString(),
           });
+        } else if (msg.type === "error_4401") {
+          unsubscribe();
+          onEvent?.({ type: "error_4401" });
+          if (!isSettled) {
+             reject(new Error("Unauthorized Web Socket Connection"));
+          }
         }
       });
 
-      chatWS.send({ conversation_id: conversationId, content })
+      chatWS.send(token, { conversation_id: conversationId, content })
         .catch((err) => {
           unsubscribe();
           if (!isSettled) {

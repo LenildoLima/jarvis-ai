@@ -1,5 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.services.groq_service import stream_chat_response
+from app.core.auth import get_user_from_ws_token
+from app.services.supabase_service import get_profile
 
 router = APIRouter()
 
@@ -11,6 +13,16 @@ _conversation_history: dict[str, list[dict[str, str]]] = {}
 @router.websocket("/ws/chat")
 async def chat_websocket(websocket: WebSocket):
     await websocket.accept()
+    
+    token = websocket.query_params.get("token")
+    display_name = "Comandante"
+    if token:
+        user = await get_user_from_ws_token(token)
+        if user:
+            profile = get_profile(user["id"])
+            if profile and profile.get("display_name"):
+                display_name = profile["display_name"]
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -23,7 +35,7 @@ async def chat_websocket(websocket: WebSocket):
             await websocket.send_json({"type": "start"})
 
             full_response = ""
-            async for chunk in stream_chat_response(user_message, history):
+            async for chunk in stream_chat_response(user_message, history, display_name=display_name):
                 full_response += chunk
                 await websocket.send_json({"type": "chunk", "content": chunk})
 

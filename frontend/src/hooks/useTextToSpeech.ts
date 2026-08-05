@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, MutableRefObject } from "react";
+import { useWakeWordStore } from "@/store/wakeWordStore";
 
 // ---------------------------------------------------------------------------
 // ⚙️  Configuração de voz — ajuste aqui sem tocar no resto do hook
 // ---------------------------------------------------------------------------
 
 /** Nomes parciais priorizados ao buscar voz feminina pt-BR (case-insensitive). */
-const FEMALE_NAME_HINTS = ["francisca", "luciana", "maria", "vitória", "ana", "helena"];
+const FEMALE_NAME_HINTS = ["natural", "online", "google", "francisca", "luciana", "maria", "vitória", "ana", "helena"];
 
-/** Pitch (tom): 0.0–2.0, padrão do navegador = 1.0.
- *  0.85 soa levemente mais grave mas ainda feminino. */
-const TTS_PITCH = 0.85;
+/** Pitch (tom): 0.0–2.0, padrão do navegador = 1.0. */
+const TTS_PITCH = 1.0;
 
 /** Rate (velocidade): 0.1–10.0, padrão = 1.0. */
-const TTS_RATE = 1.02;
+const TTS_RATE = 1.0;
 
 // ---------------------------------------------------------------------------
 // Resolução assíncrona da voz feminina pt-BR
@@ -56,7 +56,7 @@ function resolveFemaleVoice(): Promise<SpeechSynthesisVoice | null> {
 // ---------------------------------------------------------------------------
 
 /** TTS com SpeechSynthesis + legendas ao vivo; voz feminina pt-BR automática. */
-export function useTextToSpeech() {
+export function useTextToSpeech(stopMicRef?: MutableRefObject<() => void>) {
   const [speaking, setSpeaking] = useState(false);
   const [caption, setCaption] = useState("");
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -82,13 +82,36 @@ export function useTextToSpeech() {
     }
     setSpeaking(false);
     setCaption("");
+    // Garante que o microfone contínuo seja retomado caso o TTS seja cancelado manualmente
+    setTimeout(() => {
+      useWakeWordStore.getState().setSpeaking(false);
+      console.log("[WakeWord DEBUG] TTS cancelado manualmente - retomando escuta (800ms delay)");
+    }, 800);
   }, [clear]);
 
   const speak = useCallback(
     (text: string) =>
       new Promise<void>((resolve) => {
+        // 1. Para o mic IMEDIATAMENTE e sincronamente antes de qualquer áudio sair
+        //    Isso evita o race condition onde o Chrome captura o início da fala da Bell
+        if (stopMicRef?.current) {
+          stopMicRef.current();
+        }
+
         clear();
         setSpeaking(true);
+
+        // 2. Sinaliza o store para que o useEffect do reconhecimento também não reinicie
+        useWakeWordStore.getState().setSpeaking(true);
+        console.log("[WakeWord DEBUG] Pausando escuta - TTS está falando");
+
+        const onTTSDone = () => {
+          setTimeout(() => {
+            useWakeWordStore.getState().setSpeaking(false);
+            console.log("[WakeWord DEBUG] TTS terminou (onTTSDone + 800ms delay) - retomando escuta");
+            resolve();
+          }, 800);
+        };
 
         // Legenda palavra-a-palavra
         const words = text.split(/\s+/);
@@ -103,7 +126,7 @@ export function useTextToSpeech() {
             () => {
               setSpeaking(false);
               setCaption("");
-              resolve();
+              onTTSDone();
             },
             step * words.length + 500,
           ),
@@ -118,6 +141,14 @@ export function useTextToSpeech() {
           if (voiceRef.current) {
             utterance.voice = voiceRef.current;
           }
+          // Garante que o store seja atualizado pelo evento real do navegador também
+          utterance.onend = () => {
+            setTimeout(() => {
+              useWakeWordStore.getState().setSpeaking(false);
+              console.log("[WakeWord DEBUG] TTS terminou (utterance.onend + 800ms delay) - retomando escuta");
+              resolve();
+            }, 800);
+          };
           window.speechSynthesis.speak(utterance);
         }
       }),

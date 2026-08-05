@@ -73,10 +73,11 @@ export function AIOrb({ size = 320, className, showLabel = true }: AIOrbProps) {
         </motion.g>
 
         <motion.circle
+          key={`orb-core-${active}`}
           cx="100"
           cy="100"
-          r="56"
           fill="url(#orb-core)"
+          initial={{ r: active ? 54 : 52, opacity: 0.85 }}
           animate={{ r: active ? [54, 60, 54] : [52, 56, 52], opacity: [0.85, 1, 0.85] }}
           transition={{ duration: status === "speaking" ? 1.1 : 3.4, repeat: Infinity, ease: "easeInOut" }}
         />

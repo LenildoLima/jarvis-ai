@@ -18,62 +18,7 @@ export const mockUser: User = {
   createdAt: "2025-11-02T10:00:00.000Z",
 };
 
-export const mockConversations: Conversation[] = [
-  {
-    id: "cnv_01",
-    title: "Rotina matinal",
-    preview: "Preparar briefing diário às 07:00",
-    updatedAt: "2026-07-29T08:12:00.000Z",
-    messageCount: 14,
-  },
-  {
-    id: "cnv_02",
-    title: "Arquitetura FastAPI",
-    preview: "Camada de serviços e WebSocket",
-    updatedAt: "2026-07-28T21:40:00.000Z",
-    messageCount: 32,
-  },
-  {
-    id: "cnv_03",
-    title: "Automação da casa",
-    preview: "Cenário noturno com luzes âmbar",
-    updatedAt: "2026-07-27T23:05:00.000Z",
-    messageCount: 8,
-  },
-  {
-    id: "cnv_04",
-    title: "Relatório de energia",
-    preview: "Consumo semanal caiu 12%",
-    updatedAt: "2026-07-26T16:22:00.000Z",
-    messageCount: 5,
-  },
-];
-
-export const mockMessages: Message[] = [
-  {
-    id: "msg_01",
-    conversationId: "cnv_01",
-    role: "assistant",
-    content:
-      "Boa noite. Bem-vindo de volta. Todos os sistemas estão operando normalmente.",
-    createdAt: "2026-07-29T08:10:00.000Z",
-  },
-  {
-    id: "msg_02",
-    conversationId: "cnv_01",
-    role: "user",
-    content: "Qual é a situação do núcleo agora?",
-    createdAt: "2026-07-29T08:10:30.000Z",
-  },
-  {
-    id: "msg_03",
-    conversationId: "cnv_01",
-    role: "assistant",
-    content:
-      "Núcleo estável a 41°C, uso de CPU em 24% e latência de rede em 18 ms. Nenhum alerta ativo nas últimas 12 horas.",
-    createdAt: "2026-07-29T08:10:44.000Z",
-  },
-];
+// mockConversations, mockMessages removed as they are now fetching real data from backend.
 
 export const mockAssistantReplies = [
   "Entendido. Encaminhando a tarefa para o módulo apropriado e monitorando o resultado.",

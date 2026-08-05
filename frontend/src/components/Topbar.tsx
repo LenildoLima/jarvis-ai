@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Bell, CloudMoon, Command, Settings, UserRound } from "lucide-react";
+import { Bell, CloudMoon, Command, Settings, UserRound, Ear } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { NotificationCard } from "@/components/NotificationCard";
 import { EmptyState } from "@/components/EmptyState";
 import { useUIStore } from "@/store/uiStore";
-import { mockUser } from "@/mock/data";
+import { useAuthStore } from "@/store/authStore";
+import { useWakeWordStore } from "@/store/wakeWordStore";
 
 function useClock() {
   const [now, setNow] = useState<Date | null>(null);
@@ -22,6 +23,8 @@ export function Topbar() {
   const notifications = useUIStore((s) => s.notifications);
   const dismiss = useUIStore((s) => s.dismissNotification);
   const toggleCommand = useUIStore((s) => s.toggleCommand);
+  const { user, logout } = useAuthStore();
+  const { enabled: wakeWordEnabled, toggleEnabled: toggleWakeWord } = useWakeWordStore();
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/60 bg-background/40 px-6 backdrop-blur-md">
@@ -49,6 +52,17 @@ export function Topbar() {
           <Command className="size-3.5" />
           <span className="hidden sm:inline">Comandos</span>
           <kbd className="rounded border border-border px-1 text-[10px]">⌘K</kbd>
+        </button>
+
+        <button
+          onClick={toggleWakeWord}
+          className={`hud-panel relative flex size-9 items-center justify-center transition-colors hover:text-primary ${wakeWordEnabled ? "text-cyan" : ""}`}
+          title={wakeWordEnabled ? "Escuta Contínua (Oi Bell) Ativada" : "Escuta Contínua (Oi Bell) Desativada"}
+        >
+          <Ear className="size-4" />
+          {wakeWordEnabled && (
+            <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-cyan shadow-[0_0_8px_var(--cyan)] animate-pulse" />
+          )}
         </button>
 
         <Popover>
@@ -82,15 +96,27 @@ export function Topbar() {
           <Settings className="size-4" />
         </Link>
 
-        <Link
-          to="/auth"
-          className="hud-panel flex items-center gap-2 px-2.5 py-1.5 transition-colors hover:text-primary"
-        >
-          <span className="flex size-6 items-center justify-center rounded-full bg-primary/15">
-            <UserRound className="size-3.5 text-primary" />
-          </span>
-          <span className="hidden text-xs sm:inline">{mockUser.name}</span>
-        </Link>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className="hud-panel flex items-center gap-2 px-2.5 py-1.5 transition-colors hover:text-primary"
+            >
+              <span className="flex size-6 items-center justify-center rounded-full bg-primary/15">
+                <UserRound className="size-3.5 text-primary" />
+              </span>
+              <span className="hidden text-xs sm:inline">{user?.name || "Usuário"}</span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-48 space-y-1 p-2 border-cyan/40 bg-popover/95 backdrop-blur-xl">
+            <div className="px-2 py-1.5 text-xs font-medium text-foreground truncate">{user?.email}</div>
+            <button 
+              onClick={() => logout()} 
+              className="w-full text-left px-2 py-1.5 text-xs text-red-500 hover:bg-red-500/15 rounded transition-colors flex items-center gap-2"
+            >
+              Sair do sistema
+            </button>
+          </PopoverContent>
+        </Popover>
       </div>
     </header>
   );

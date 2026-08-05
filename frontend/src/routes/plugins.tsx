@@ -11,9 +11,9 @@ import type { Plugin } from "@/types";
 export const Route = createFileRoute("/plugins")({
   head: () => ({
     meta: [
-      { title: "Plugins e integrações — NOVA" },
+      { title: "Plugins e integrações — BELL" },
       { name: "description", content: "Ative módulos e integrações para expandir o assistente." },
-      { property: "og:title", content: "Plugins e integrações — NOVA" },
+      { property: "og:title", content: "Plugins e integrações — BELL" },
       { property: "og:description", content: "Ative módulos e integrações do assistente." },
     ],
   }),

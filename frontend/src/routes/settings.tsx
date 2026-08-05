@@ -6,9 +6,9 @@ import { useUIStore } from "@/store/uiStore";
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "Configurações — NOVA" },
+      { title: "Configurações — BELL" },
       { name: "description", content: "Ajuste voz, legendas e preferências do assistente." },
-      { property: "og:title", content: "Configurações — NOVA" },
+      { property: "og:title", content: "Configurações — BELL" },
       { property: "og:description", content: "Ajuste voz, legendas e preferências." },
     ],
   }),

@@ -10,9 +10,9 @@ import { useMemoryData } from "@/hooks/useMemoryData";
 export const Route = createFileRoute("/memory")({
   head: () => ({
     meta: [
-      { title: "Memória neural — NOVA" },
+      { title: "Memória neural — BELL" },
       { name: "description", content: "Lembranças, preferências e conhecimento aprendidos pelo assistente." },
-      { property: "og:title", content: "Memória neural — NOVA" },
+      { property: "og:title", content: "Memória neural — BELL" },
       { property: "og:description", content: "Lembranças e preferências aprendidas pelo assistente." },
     ],
   }),

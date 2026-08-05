@@ -5,7 +5,7 @@ export const env = {
   wsUrl: import.meta.env.VITE_WS_URL ?? "",
 } as const;
 
-export const APP_NAME = "NOVA";
+export const APP_NAME = "BELL";
 export const APP_VERSION = "0.9.4";
 export const APP_TAGLINE = "Assistente pessoal de interface neural";
 

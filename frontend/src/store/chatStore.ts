@@ -1,6 +1,8 @@
 import { create } from "zustand";
-import { chatService, chatWS } from "@/services/chatService";
+import { chatWS, chatService } from "@/services/chatService";
+import { conversationsService, UnauthorizedError } from "@/services/conversationsService";
 import { useAssistantStore } from "@/store/assistantStore";
+import { useAuthStore } from "@/store/authStore";
 import type { Conversation, Message } from "@/types";
 
 interface ChatState {
@@ -25,6 +27,15 @@ export const useChatStore = create<ChatState>((set, get) => {
     set({ socketStatus: status });
   });
 
+  const handleAuthError = (err: any) => {
+    if (err instanceof UnauthorizedError || err.message?.includes("Unauthorized")) {
+      useAuthStore.getState().logout();
+      set({ conversations: [], messages: [], activeId: null });
+      return true;
+    }
+    return false;
+  };
+
   return {
     conversations: [],
     messages: [],
@@ -38,30 +49,62 @@ export const useChatStore = create<ChatState>((set, get) => {
     setQuery: (query) => set({ query }),
 
     async loadConversations() {
+      const { accessToken } = useAuthStore.getState();
+      if (!accessToken) return;
+
       set({ loadingConversations: true });
-      const conversations = await chatService.listConversations(get().query);
-      set({ loadingConversations: false, conversations });
-      if (!get().activeId && conversations[0]) {
-        await get().selectConversation(conversations[0].id);
+      try {
+        const conversations = await conversationsService.listConversations(accessToken, get().query);
+        set({ loadingConversations: false, conversations });
+        if (!get().activeId && conversations.length > 0) {
+          await get().selectConversation(conversations[0].id);
+        }
+      } catch (err: any) {
+        set({ loadingConversations: false });
+        if (!handleAuthError(err)) {
+          console.error("Failed to load conversations:", err);
+        }
       }
     },
 
     async newConversation() {
-      const conversation = await chatService.createConversation();
-      set((s) => ({
-        conversations: [conversation, ...s.conversations],
-        activeId: conversation.id,
-        messages: [],
-      }));
+      const { accessToken } = useAuthStore.getState();
+      if (!accessToken) return;
+
+      try {
+        const conversation = await conversationsService.createConversation(accessToken);
+        set((s) => ({
+          conversations: [conversation, ...s.conversations],
+          activeId: conversation.id,
+          messages: [],
+        }));
+      } catch (err: any) {
+         if (!handleAuthError(err)) {
+          console.error("Failed to create conversation:", err);
+        }
+      }
     },
 
     async selectConversation(id) {
+      const { accessToken } = useAuthStore.getState();
+      if (!accessToken) return;
+
       set({ activeId: id, loadingMessages: true, messages: [] });
-      const messages = await chatService.listMessages(id);
-      if (get().activeId === id) set({ messages, loadingMessages: false });
+      try {
+        const messages = await conversationsService.listMessages(accessToken, id);
+        if (get().activeId === id) set({ messages, loadingMessages: false });
+      } catch (err: any) {
+        set({ loadingMessages: false });
+        if (!handleAuthError(err)) {
+          console.error("Failed to load messages:", err);
+        }
+      }
     },
 
     async send(content) {
+      const { accessToken } = useAuthStore.getState();
+      if (!accessToken) return null;
+
       const conversationId = get().activeId ?? "cnv_local";
       const userMessage: Message = {
         id: `msg_${Math.random().toString(36).slice(2, 8)}`,
@@ -81,6 +124,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
       try {
         const reply = await chatService.sendMessage(
+          accessToken,
           conversationId,
           content,
           (event) => {
@@ -111,6 +155,9 @@ export const useChatStore = create<ChatState>((set, get) => {
                   };
                 }
               });
+            } else if (event.type === "error_4401") {
+               useAuthStore.getState().logout();
+               set({ conversations: [], messages: [], activeId: null });
             }
           }
         );
@@ -132,9 +179,13 @@ export const useChatStore = create<ChatState>((set, get) => {
         });
 
         return reply;
-      } catch (err) {
-        console.error("Chat WebSocket request failed:", err);
+      } catch (err: any) {
+        console.error("Chat request failed:", err);
         set({ thinking: false });
+
+        if (err.message === "Unauthorized Web Socket Connection") {
+            return null;
+        }
         
         const errorMsg: Message = {
           id: `msg_err_${Math.random().toString(36).slice(2, 8)}`,

@@ -7,9 +7,9 @@ import { useSystemStore } from "@/store/systemStore";
 export const Route = createFileRoute("/system")({
   head: () => ({
     meta: [
-      { title: "Monitoramento do sistema — NOVA" },
+      { title: "Monitoramento do sistema — BELL" },
       { name: "description", content: "Telemetria em tempo real de CPU, memória, GPU, disco e rede." },
-      { property: "og:title", content: "Monitoramento do sistema — NOVA" },
+      { property: "og:title", content: "Monitoramento do sistema — BELL" },
       { property: "og:description", content: "Telemetria em tempo real do núcleo." },
     ],
   }),
