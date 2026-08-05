@@ -114,10 +114,10 @@ export function useContinuousListening(onCommandFinalized: (command: string) => 
       const isCurrentlySpeaking = useWakeWordStore.getState().isSpeaking;
       if (currentAssistantStatus === "speaking" || isCurrentlySpeaking) return;
 
-      // Filtro Temporal: descarte rígido de qualquer áudio nos primeiros 1200ms
+      // Filtro Temporal: descarte rígido de qualquer áudio nos primeiros 500ms
       // após o microfone ser liberado, liquidando completamente os ecos de buffer do OS
       const timeSinceSilenceAllowed = Date.now() - lastListenStartTimeRef.current;
-      if (timeSinceSilenceAllowed < 1200) {
+      if (timeSinceSilenceAllowed < 500) {
          console.log(`[WakeWord DEBUG] Áudio bloqueado pelo filtro temporal de hardware (${timeSinceSilenceAllowed}ms).`);
          return;
       }
@@ -289,7 +289,7 @@ export function useContinuousListening(onCommandFinalized: (command: string) => 
           lastRestartWasNoSpeech = false; // Reset flag
 
           // Usa delay menor após TTS para minimizar a zona morta
-          const delay = 300;
+          const delay = 500;
           console.log(`[WakeWord DEBUG] Reiniciando captura nativa com atraso de ${delay}ms...`);
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {

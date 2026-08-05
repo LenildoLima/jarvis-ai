@@ -83,10 +83,8 @@ export function useTextToSpeech(stopMicRef?: MutableRefObject<() => void>) {
     setSpeaking(false);
     setCaption("");
     // Garante que o microfone contínuo seja retomado caso o TTS seja cancelado manualmente
-    setTimeout(() => {
-      useWakeWordStore.getState().setSpeaking(false);
-      console.log("[WakeWord DEBUG] TTS cancelado manualmente - retomando escuta (800ms delay)");
-    }, 800);
+    useWakeWordStore.getState().setSpeaking(false);
+    console.log("[WakeWord DEBUG] TTS cancelado manualmente - retomando escuta imediatamente");
   }, [clear]);
 
   const speak = useCallback(
@@ -121,16 +119,7 @@ export function useTextToSpeech(stopMicRef?: MutableRefObject<() => void>) {
             setTimeout(() => setCaption(words.slice(0, i + 1).join(" ")), step * i),
           );
         });
-        timers.current.push(
-          setTimeout(
-            () => {
-              setSpeaking(false);
-              setCaption("");
-              onTTSDone();
-            },
-            step * words.length + 500,
-          ),
-        );
+        // Removido: não setamos speaking=false aqui, confiamos apenas no utterance.onend
 
         // Síntese de voz
         if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -143,11 +132,11 @@ export function useTextToSpeech(stopMicRef?: MutableRefObject<() => void>) {
           }
           // Garante que o store seja atualizado pelo evento real do navegador também
           utterance.onend = () => {
-            setTimeout(() => {
-              useWakeWordStore.getState().setSpeaking(false);
-              console.log("[WakeWord DEBUG] TTS terminou (utterance.onend + 800ms delay) - retomando escuta");
-              resolve();
-            }, 800);
+            setSpeaking(false);
+            setCaption("");
+            useWakeWordStore.getState().setSpeaking(false);
+            console.log("[WakeWord DEBUG] TTS terminou (utterance.onend) - retomando escuta imediatamente");
+            resolve();
           };
           window.speechSynthesis.speak(utterance);
         }

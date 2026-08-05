@@ -58,7 +58,12 @@ def _build_system_prompt(display_name: str) -> str:
         "recentes), use 'day' ou 'week' — nunca 'any' nesses casos, mesmo "
         "que isso traga menos resultados. Buscar sem filtro de data nesse "
         "tipo de assunto tende a trazer páginas antigas bem posicionadas "
-        "mas desatualizadas, o que já causou respostas erradas antes."
+        "mas desatualizadas, o que já causou respostas erradas antes.\n\n"
+        "IMPORTANTE SOBRE A ETAPA FINAL: depois que um resultado de busca "
+        "já foi injetado na conversa como uma mensagem de sistema, você "
+        "está na etapa de gerar a resposta final em texto para o usuário — "
+        "NÃO tente chamar nenhuma ferramenta nessa etapa, apenas responda "
+        "com base no que já foi encontrado."
     )
 
 
@@ -129,8 +134,8 @@ _SEARCH_KEYWORDS = (
     "notícia", "notícias", "clima", "temperatura", "preço", "preços",
     "cotação", "cotações", "dólar", "bitcoin", "eleição", "eleições",
     "resultado", "resultados", "placar", "placares", "jogo", "jogos",
-    "partida", "partidas", "lançamento", "lançamentos", "novo", "nova",
-    "novos", "novas", "aconteceu", "aconteceram",
+    "partida", "partidas", "lançamento", "lançamentos", "novo",
+    "novos", "aconteceu", "aconteceram",
     "quando foi", "quem ganhou", "quem venceu", "quem perdeu",
     "campeão", "campeã", "campeões", "campeãs", "título", "títulos",
     "vencedor", "vencedora", "final da", "finalista",
@@ -241,13 +246,46 @@ async def stream_chat_response(
             "Modelo NÃO chamou nenhuma tool — respondendo diretamente sem busca."
         )
 
+    # A chamada final NUNCA deve permitir tool calling — mas alguns modelos
+    # tentam chamar ferramentas mesmo sem "tools" declarado, guiados pelo
+    # próprio texto do SYSTEM_PROMPT (que menciona os nomes das ferramentas).
+    # Declarar tool_choice="none" explicitamente é mais seguro do que só
+    # omitir o parâmetro "tools". Se mesmo assim falhar (o erro acontece
+    # durante a LEITURA do streaming, não na criação da chamada), capturamos
+    # isso ao puxar o primeiro chunk manualmente e, se necessário, tentamos
+    # de novo sem declarar tools nenhum.
     stream = await _client.chat.completions.create(
         model=settings.GROQ_MODEL,
         messages=messages,
+        tools=_TOOLS,
+        tool_choice="none",
         stream=True,
     )
 
-    async for chunk in stream:
+    stream_iter = stream.__aiter__()
+    try:
+        first_chunk = await stream_iter.__anext__()
+    except StopAsyncIteration:
+        return
+    except Exception as exc:
+        logger.info(
+            "Streaming final com tool_choice='none' falhou (%s) — "
+            "tentando novamente sem declarar tools.",
+            exc,
+        )
+        stream = await _client.chat.completions.create(
+            model=settings.GROQ_MODEL,
+            messages=messages,
+            stream=True,
+        )
+        stream_iter = stream.__aiter__()
+        first_chunk = await stream_iter.__anext__()
+
+    delta = first_chunk.choices[0].delta.content
+    if delta:
+        yield _strip_markdown(delta)
+
+    async for chunk in stream_iter:
         delta = chunk.choices[0].delta.content
         if delta:
             yield _strip_markdown(delta)
