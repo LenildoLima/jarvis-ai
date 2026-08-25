@@ -120,6 +120,7 @@ class ChatWebSocketClient {
 
   public async send(token: string, payload: any) {
     const socket = await this.getConnectedSocket(token);
+    console.log("[ChatWebSocketClient] Enviando payload via WebSocket:", payload);
     socket.send(JSON.stringify(payload));
   }
 }
@@ -131,21 +132,37 @@ export interface ChatService {
     token: string,
     conversationId: string,
     content: string,
+    imageBase64?: string | null,
     onEvent?: (event: { type: "start" | "chunk" | "end" | "error_4401"; content?: string }) => void
   ): Promise<Message>;
 }
 
 export const chatService: ChatService = {
-  async sendMessage(token, conversationId, content, onEvent) {
+  async sendMessage(token, conversationId, content, imageBase64, onEvent) {
     let fullResponse = "";
 
     return new Promise<Message>((resolve, reject) => {
       let isSettled = false;
+      let timeoutId: ReturnType<typeof setTimeout>;
+
+      const cleanup = () => {
+        if (!isSettled) isSettled = true;
+        clearTimeout(timeoutId);
+      };
+
+      timeoutId = setTimeout(() => {
+        if (!isSettled) {
+          cleanup();
+          reject(new Error("Timeout: Nenhuma resposta do assistente (20s). Verifique se o backend está rodando e tente novamente."));
+        }
+      }, 20000);
 
       const unsubscribe = chatWS.addListener((msg) => {
         if (msg.type === "start") {
+          clearTimeout(timeoutId);
           onEvent?.({ type: "start" });
         } else if (msg.type === "chunk") {
+          clearTimeout(timeoutId);
           fullResponse += msg.content || "";
           onEvent?.({ type: "chunk", content: msg.content || "" });
         } else if (msg.type === "end") {
@@ -161,6 +178,7 @@ export const chatService: ChatService = {
           });
         } else if (msg.type === "error_4401") {
           unsubscribe();
+          clearTimeout(timeoutId);
           onEvent?.({ type: "error_4401" });
           if (!isSettled) {
              reject(new Error("Unauthorized Web Socket Connection"));
@@ -168,9 +186,22 @@ export const chatService: ChatService = {
         }
       });
 
-      chatWS.send(token, { conversation_id: conversationId, content })
+      const payload: any = { conversation_id: conversationId, content };
+      if (imageBase64) {
+        payload.image_base64 = imageBase64;
+      }
+
+      console.log("[chatService] Enviando payload WebSocket:", {
+        conversation_id: payload.conversation_id,
+        content_length: payload.content.length,
+        image_base64_present: !!payload.image_base64,
+        image_base64_length: payload.image_base64?.length || 0
+      });
+
+      chatWS.send(token, payload)
         .catch((err) => {
           unsubscribe();
+          clearTimeout(timeoutId);
           if (!isSettled) {
             reject(err);
           }

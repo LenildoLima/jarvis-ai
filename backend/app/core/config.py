@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_SERVICE_KEY: str
 
+    # Spotify (OAuth para busca/controle de música)
+    SPOTIFY_CLIENT_ID: str
+    SPOTIFY_CLIENT_SECRET: str
+    SPOTIFY_REDIRECT_URI: str = "http://127.0.0.1:8000/spotify/callback"
+
     # CORS — endereço onde o frontend roda localmente
     FRONTEND_ORIGIN: str = "http://localhost:5173"
 

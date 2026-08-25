@@ -15,7 +15,7 @@ export function SystemCard({ metric, accent = "var(--neon)" }: { metric: Metric;
       <div className="flex items-baseline justify-between">
         <span className="text-[11px] tracking-[0.24em] text-muted-foreground uppercase">{metric.label}</span>
         <span className="font-display text-2xl tabular-nums" style={{ color: accent }}>
-          {metric.value}
+          {metric.value ?? "—"}
           <span className="ml-1 text-xs text-muted-foreground">{metric.unit}</span>
         </span>
       </div>

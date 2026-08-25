@@ -66,7 +66,13 @@ export function ConversationList() {
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-xs font-medium">{c.title}</span>
                 <span className="shrink-0 text-[10px] text-muted-foreground">
-                  {new Date(c.updatedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                  {(() => {
+                    if (!c.updatedAt) return "";
+                    const date = new Date(c.updatedAt);
+                    return isNaN(date.getTime())
+                      ? ""
+                      : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+                  })()}
                 </span>
               </div>
               <p className="mt-1 truncate text-[11px] text-muted-foreground">{c.preview}</p>

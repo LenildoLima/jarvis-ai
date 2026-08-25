@@ -17,6 +17,7 @@ export interface Message {
   content: string;
   createdAt: string;
   pending?: boolean;
+  imageBase64?: string | null;
 }
 
 export interface Conversation {
@@ -63,6 +64,7 @@ export interface SystemStats {
   temperature: Metric;
   disk: Metric;
   network: Metric;
+  disks?: Metric[];
   processes: { id: string; name: string; cpu: number; ram: number }[];
   updatedAt: string;
 }

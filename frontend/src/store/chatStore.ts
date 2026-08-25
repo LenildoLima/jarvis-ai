@@ -15,10 +15,10 @@ interface ChatState {
   thinking: boolean;
   socketStatus: "connected" | "connecting" | "disconnected" | "error";
   setQuery: (query: string) => void;
-  loadConversations: () => Promise<void>;
+  loadConversations: (silent?: boolean) => Promise<void>;
   newConversation: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
-  send: (content: string) => Promise<Message | null>;
+  send: (content: string, imageBase64?: string | null) => Promise<Message | null>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => {
@@ -48,19 +48,20 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     setQuery: (query) => set({ query }),
 
-    async loadConversations() {
+    async loadConversations(silent = false) {
       const { accessToken } = useAuthStore.getState();
       if (!accessToken) return;
 
-      set({ loadingConversations: true });
+      if (!silent) set({ loadingConversations: true });
       try {
         const conversations = await conversationsService.listConversations(accessToken, get().query);
-        set({ loadingConversations: false, conversations });
+        set({ conversations });
+        if (!silent) set({ loadingConversations: false });
         if (!get().activeId && conversations.length > 0) {
           await get().selectConversation(conversations[0].id);
         }
       } catch (err: any) {
-        set({ loadingConversations: false });
+        if (!silent) set({ loadingConversations: false });
         if (!handleAuthError(err)) {
           console.error("Failed to load conversations:", err);
         }
@@ -101,17 +102,44 @@ export const useChatStore = create<ChatState>((set, get) => {
       }
     },
 
-    async send(content) {
+    async send(content, imageBase64) {
       const { accessToken } = useAuthStore.getState();
       if (!accessToken) return null;
 
-      const conversationId = get().activeId ?? "cnv_local";
+      let conversationId = get().activeId;
+      
+      if (!conversationId) {
+        try {
+          const conversation = await conversationsService.createConversation(accessToken);
+          conversationId = conversation.id;
+          set((s) => ({
+            conversations: [conversation, ...s.conversations],
+            activeId: conversationId,
+            messages: [],
+          }));
+        } catch (err: any) {
+          if (!handleAuthError(err)) {
+            console.error("Failed to create inline conversation:", err);
+          }
+          const errorMsg: Message = {
+            id: `msg_err_${Math.random().toString(36).slice(2, 8)}`,
+            conversationId: "error",
+            role: "assistant",
+            content: "Desculpe, ocorreu um erro ao iniciar uma nova conversa. Por favor, tente novamente.",
+            createdAt: new Date().toISOString(),
+          };
+          set((s) => ({ messages: [...s.messages, errorMsg] }));
+          return errorMsg;
+        }
+      }
+
       const userMessage: Message = {
         id: `msg_${Math.random().toString(36).slice(2, 8)}`,
         conversationId,
         role: "user",
         content,
         createdAt: new Date().toISOString(),
+        imageBase64,
       };
       set((s) => ({
         messages: [...s.messages, userMessage],
@@ -127,6 +155,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           accessToken,
           conversationId,
           content,
+          imageBase64,
           (event) => {
             if (event.type === "start") {
               set({ thinking: true });
@@ -177,6 +206,8 @@ export const useChatStore = create<ChatState>((set, get) => {
             thinking: false,
           };
         });
+
+        void get().loadConversations(true);
 
         return reply;
       } catch (err: any) {

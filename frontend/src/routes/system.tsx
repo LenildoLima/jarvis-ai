@@ -2,7 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { SystemCard } from "@/features/system/SystemCard";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
-import { useSystemStore } from "@/store/systemStore";
+import { EmptyState } from "@/components/EmptyState";
+import { useSystemStats } from "@/hooks/useSystemStats";
+import { usePluginStore } from "@/store/pluginStore";
+import { Activity } from "lucide-react";
 
 export const Route = createFileRoute("/system")({
   head: () => ({
@@ -17,7 +20,9 @@ export const Route = createFileRoute("/system")({
 });
 
 function SystemPage() {
-  const stats = useSystemStore((s) => s.stats);
+  const { stats } = useSystemStats();
+  const { isPluginEnabled } = usePluginStore();
+  const isEnabled = isPluginEnabled("plg_sys");
 
   return (
     <AppShell>
@@ -25,7 +30,9 @@ function SystemPage() {
         <h1 className="font-display text-2xl">Sistema</h1>
         <p className="mt-1 text-sm text-muted-foreground">Telemetria do núcleo em tempo real.</p>
         <div className="mt-6">
-          {!stats ? (
+          {!isEnabled ? (
+            <EmptyState icon={Activity} title="Telemetria Desativada" description="Ative o plugin Sistema para ver a telemetria do núcleo." />
+          ) : !stats ? (
             <LoadingSkeleton rows={6} />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -33,7 +40,17 @@ function SystemPage() {
               <SystemCard metric={stats.ram} accent="var(--cyan)" />
               <SystemCard metric={stats.gpu} accent="var(--violet)" />
               <SystemCard metric={stats.temperature} accent="var(--cyan)" />
-              <SystemCard metric={stats.disk} accent="var(--neon)" />
+
+              {/* Renderiza um card por disco — usa a lista `disks`
+                  se disponível, senão cai de volta no campo legado `disk` */}
+              {stats.disks && stats.disks.length > 0 ? (
+                stats.disks.map((diskMetric) => (
+                  <SystemCard key={diskMetric.label} metric={diskMetric} accent="var(--neon)" />
+                ))
+              ) : (
+                <SystemCard metric={stats.disk} accent="var(--neon)" />
+              )}
+
               <SystemCard metric={stats.network} accent="var(--violet)" />
             </div>
           )}

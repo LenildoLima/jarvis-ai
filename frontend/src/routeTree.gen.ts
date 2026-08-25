@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as PluginsRouteImport } from './routes/plugins'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CalendarRoute = CalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoryRoute = MemoryRouteImport.update({
@@ -50,6 +56,7 @@ const SystemRoute = SystemRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/calendar': typeof CalendarRoute
   '/memory': typeof MemoryRoute
   '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/calendar': typeof CalendarRoute
   '/memory': typeof MemoryRoute
   '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/calendar': typeof CalendarRoute
   '/memory': typeof MemoryRoute
   '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
@@ -74,13 +83,28 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/memory' | '/plugins' | '/settings' | '/system'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/calendar'
+    | '/memory'
+    | '/plugins'
+    | '/settings'
+    | '/system'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/memory' | '/plugins' | '/settings' | '/system'
+  to:
+    | '/'
+    | '/auth'
+    | '/calendar'
+    | '/memory'
+    | '/plugins'
+    | '/settings'
+    | '/system'
   id:
     | '__root__'
     | '/'
     | '/auth'
+    | '/calendar'
     | '/memory'
     | '/plugins'
     | '/settings'
@@ -90,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
+  CalendarRoute: typeof CalendarRoute
   MemoryRoute: typeof MemoryRoute
   PluginsRoute: typeof PluginsRoute
   SettingsRoute: typeof SettingsRoute
@@ -110,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/calendar': {
+      id: '/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof CalendarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memory': {
@@ -146,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
+  CalendarRoute: CalendarRoute,
   MemoryRoute: MemoryRoute,
   PluginsRoute: PluginsRoute,
   SettingsRoute: SettingsRoute,

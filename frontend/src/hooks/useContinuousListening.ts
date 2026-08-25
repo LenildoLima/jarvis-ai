@@ -239,6 +239,12 @@ export function useContinuousListening(onCommandFinalized: (command: string) => 
     };
 
     rec.onerror = (e: any) => {
+      if (e.error === "aborted" || e.error === "no-speech") {
+         // no-speech é comportamento normal — marca para NÃO incrementar o contador no onend
+         lastRestartWasNoSpeech = true;
+         return; // Nao polui o console com esse erro normal
+      }
+      
       console.warn(`[WakeWord DEBUG] onerror disparado! Origem do erro: '${e.error}'`, e);
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
          console.warn("[WakeWord DEBUG] Permissão de microfone negada. Desativando.");
@@ -246,9 +252,6 @@ export function useContinuousListening(onCommandFinalized: (command: string) => 
          if (state.enabled) {
              state.toggleEnabled();
          }
-      } else if (e.error === "aborted" || e.error === "no-speech") {
-         // no-speech é comportamento normal — marca para NÃO incrementar o contador no onend
-         lastRestartWasNoSpeech = true;
       } else {
          console.warn("[WakeWord DEBUG] Erro na captura mapeado:", e.error);
       }
@@ -266,7 +269,7 @@ export function useContinuousListening(onCommandFinalized: (command: string) => 
           return;
        }
 
-       // Reinicia automaticamente (a menos que tenha sido explicitamente desativado)
+        // Reinicia automaticamente (a menos que tenha sido explicitamente desativado)
        if (currentStoreState.enabled && !isStopping) {
           
           // no-speech é comportamento normal — NÃO incrementa o contador anti-loop
@@ -283,14 +286,11 @@ export function useContinuousListening(onCommandFinalized: (command: string) => 
                currentStoreState.toggleEnabled();
                return;
             }
-          } else {
-            console.log("[WakeWord DEBUG] Restart por no-speech — não penaliza o contador.");
           }
           lastRestartWasNoSpeech = false; // Reset flag
 
           // Usa delay menor após TTS para minimizar a zona morta
           const delay = 500;
-          console.log(`[WakeWord DEBUG] Reiniciando captura nativa com atraso de ${delay}ms...`);
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {
               if (useWakeWordStore.getState().isSpeaking) {

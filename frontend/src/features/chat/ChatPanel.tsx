@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AnimatePresence, motion } from "motion/react";
 
-import { Paperclip, SendHorizonal, Sparkles, Volume2, VolumeX } from "lucide-react";
+import { Paperclip, SendHorizonal, Sparkles, Volume2, VolumeX, X, Sun } from "lucide-react";
 
 import ReactMarkdown from "react-markdown";
 
@@ -38,6 +38,10 @@ export function ChatPanel() {
 
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
 
+  const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string; base64: string } | null>(null);
+
+  const [isDragging, setIsDragging] = useState(false);
+
   const messages = useChatStore((s) => s.messages);
 
   const thinking = useChatStore((s) => s.thinking);
@@ -55,6 +59,10 @@ export function ChatPanel() {
   const setCaption = useAssistantStore((s) => s.setCaption);
 
   const isSubmittingRef = useRef(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const dropZoneRef = useRef<HTMLDivElement>(null);
 
   // useContinuousListening direto aqui para ter acesso ao stopMicRef e passá-lo ao TTS
 
@@ -118,13 +126,131 @@ export function ChatPanel() {
   // Safety net: reset isSubmittingRef se estiver travado por mais de 30s
   useEffect(() => {
     const safetyCheck = setInterval(() => {
-      if (isSubmittingRef.current && !thinking) {
+      if (isSubmittingRef.current && !thinking && !speaking) {
         console.log("[ChatPanel] Safety net: Resetando isSubmittingRef travado");
         isSubmittingRef.current = false;
       }
     }, 30000);
     return () => clearInterval(safetyCheck);
-  }, [thinking]);
+  }, [thinking, speaking]);
+
+  // Resumo Matinal - Gatilho automático único diário
+  useEffect(() => {
+    if (socketStatus === "connected" && !thinking && !isSubmittingRef.current) {
+      const today = new Date().toLocaleDateString();
+      const lastBriefing = localStorage.getItem("jarvis_last_briefing");
+      if (lastBriefing !== today) {
+        localStorage.setItem("jarvis_last_briefing", today);
+        // Delay suave para não conflitar com a montagem
+        setTimeout(() => {
+          void submit("[SISTEMA: GERAR_RESUMO_MATINAL]");
+        }, 1500);
+      }
+    }
+  }, [socketStatus]);
+
+  // Função para converter arquivo para base64 com validação
+  const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      // Validar tamanho (5MB)
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        reject(new Error("O arquivo excede o limite de 5MB"));
+        return;
+      }
+
+      // Validar tipo
+      const validTypes = ["image/jpeg", "image/png", "image/webp"];
+      if (!validTypes.includes(file.type)) {
+        reject(new Error("Tipo de arquivo não suportado. Use JPEG, PNG ou WebP"));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remover prefixo data:image/...;base64,
+        const base64 = result.split(",")[1];
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error("Erro ao ler o arquivo"));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handler para seleção de arquivo
+  const handleFileSelect = (file: File) => {
+    convertFileToBase64(file)
+      .then((base64) => {
+        const preview = URL.createObjectURL(file);
+        setSelectedImage({ file, preview, base64 });
+      })
+      .catch((error) => {
+        toast.error(error.message);
+      });
+  };
+
+  // Handler para clique no botão de anexar
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Handler para change do input file
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+    // Reset input para permitir selecionar o mesmo arquivo novamente
+    e.target.value = "";
+  };
+
+  // Handler para remover imagem selecionada
+  const handleRemoveImage = () => {
+    if (selectedImage) {
+      URL.revokeObjectURL(selectedImage.preview);
+    }
+    setSelectedImage(null);
+  };
+
+  // Handlers para drag and drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  // Handler para paste de imagem do clipboard
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          handleFileSelect(file);
+        }
+        break;
+      }
+    }
+  };
 
 
 
@@ -132,7 +258,7 @@ export function ChatPanel() {
 
     const content = text.trim();
 
-    if (!content) return;
+    if (!content && !selectedImage) return;
 
     // Guard contra chamadas concorrentes (evita que loop de feedback trave o estado thinking)
 
@@ -146,13 +272,19 @@ export function ChatPanel() {
 
     isSubmittingRef.current = true;
 
+    const imageBase64 = selectedImage?.base64 || null;
+
+    console.log("[ChatPanel] Enviando mensagem - imageBase64 presente:", !!imageBase64, "tamanho:", imageBase64?.length || 0);
+
     setDraft("");
+
+    setSelectedImage(null);
 
     setStatus("processing");
 
     try {
 
-      const reply = await send(content);
+      const reply = await send(content, imageBase64);
 
       inputRef.current?.focus();
 
@@ -211,7 +343,16 @@ export function ChatPanel() {
 
     <div className="flex h-full min-h-0 flex-col">
 
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
+      <div
+        ref={dropZoneRef}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={cn(
+          "min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4 transition-colors",
+          isDragging && "bg-cyan/5"
+        )}
+      >
 
         {loadingMessages ? (
 
@@ -221,7 +362,7 @@ export function ChatPanel() {
 
           <AnimatePresence initial={false}>
 
-            {messages.map((m) => (
+            {messages.filter(m => !m.content.startsWith("[SISTEMA:")).map((m) => (
               <motion.div
 
                 key={m.id}
@@ -251,6 +392,15 @@ export function ChatPanel() {
                   )}
 
                 >
+                  {m.role === "user" && m.imageBase64 && (
+                    <div className="mb-2 overflow-hidden rounded-lg">
+                      <img
+                        src={`data:image/jpeg;base64,${m.imageBase64}`}
+                        alt="Imagem enviada"
+                        className="max-h-48 w-auto object-contain"
+                      />
+                    </div>
+                  )}
                   {m.role === "assistant" && (
                     <button
                       onClick={() => handleSpeakMessage(m.id, m.content)}
@@ -367,6 +517,17 @@ export function ChatPanel() {
       <div className="border-t border-border/60 bg-background/50 px-6 py-4 backdrop-blur-md">
 
         <div className="hud-panel flex items-end gap-2 p-2">
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-10 shrink-0 rounded-full text-muted-foreground hover:text-amber-400"
+            aria-label="Gerar Resumo Matinal Automático"
+            onClick={() => void submit("[SISTEMA: GERAR_RESUMO_MATINAL]")}
+            disabled={thinking}
+          >
+            <Sun className="size-4" />
+          </Button>
 
           <Button
 
@@ -378,7 +539,7 @@ export function ChatPanel() {
 
             aria-label="Anexar arquivo"
 
-            onClick={() => toast("Anexos chegam com a integração do backend.")}
+            onClick={handleAttachClick}
 
           >
 
@@ -386,7 +547,40 @@ export function ChatPanel() {
 
           </Button>
 
+          <input
 
+            ref={fileInputRef}
+
+            type="file"
+
+            accept="image/jpeg,image/png,image/webp"
+
+            onChange={handleFileInputChange}
+
+            className="hidden"
+
+          />
+
+          {selectedImage && (
+            <div className="relative mb-2 flex items-center gap-2 rounded-lg border border-border/60 bg-secondary/30 p-2">
+              <img
+                src={selectedImage.preview}
+                alt="Preview"
+                className="h-12 w-12 rounded object-cover"
+              />
+              <span className="flex-1 truncate text-xs text-muted-foreground">
+                {selectedImage.file.name}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6 shrink-0 rounded-full"
+                onClick={handleRemoveImage}
+              >
+                <X className="size-3" />
+              </Button>
+            </div>
+          )}
 
           <Textarea
 
@@ -407,6 +601,8 @@ export function ChatPanel() {
               }
 
             }}
+
+            onPaste={handlePaste}
 
             rows={1}
 
@@ -444,7 +640,7 @@ export function ChatPanel() {
 
             aria-label="Enviar mensagem"
 
-            disabled={!draft.trim() || thinking}
+            disabled={(!draft.trim() && !selectedImage) || thinking}
 
             onClick={() => void submit(draft)}
 

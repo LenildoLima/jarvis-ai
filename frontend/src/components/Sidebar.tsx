@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Brain, Cpu, Info, LayoutDashboard, Puzzle, Settings, Sparkles } from "lucide-react";
+import { Brain, Cpu, Info, LayoutDashboard, Puzzle, Settings, Sparkles, CalendarDays } from "lucide-react";
 import { APP_NAME, APP_VERSION } from "@/config/env";
 import { useAssistantStore } from "@/store/assistantStore";
 import { cn } from "@/lib/utils";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/", label: "Núcleo", icon: LayoutDashboard },
   { to: "/memory", label: "Memória", icon: Brain },
+  { to: "/calendar", label: "Calendário", icon: CalendarDays },
   { to: "/plugins", label: "Plugins", icon: Puzzle },
   { to: "/system", label: "Sistema", icon: Cpu },
   { to: "/settings", label: "Configurações", icon: Settings },

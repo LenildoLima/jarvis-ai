@@ -1,7 +1,9 @@
 import { motion } from "motion/react";
 import { Cpu, Gauge, HardDrive, MemoryStick, Thermometer, Wifi } from "lucide-react";
 import { useSystemStats } from "@/hooks/useSystemStats";
+import { useSystemStatsStore } from "@/store/systemStatsStore";
 import { cn } from "@/lib/utils";
+import { usePluginStore } from "@/store/pluginStore";
 
 interface MiniMetricProps {
   icon: React.ElementType;
@@ -40,7 +42,44 @@ function MiniMetric({ icon: Icon, label, value, unit, color, pct }: MiniMetricPr
 }
 
 export function MetricsBar() {
-  const { stats, connectionStatus } = useSystemStats();
+  const { stats } = useSystemStats();
+  const connectionStatus = useSystemStatsStore((s) => s.connectionStatus);
+  const { isPluginEnabled, initialized } = usePluginStore();
+  const isEnabled = isPluginEnabled("plg_sys");
+
+  // While checking if plugin is enabled, show skeletons
+  if (!initialized) {
+    return (
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 bg-background/40 px-4 backdrop-blur-md">
+        <div className="flex items-center divide-x divide-border/40">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2 px-3">
+              <div className="size-3.5 animate-pulse rounded bg-secondary/60" />
+              <div className="hidden h-2 w-10 animate-pulse rounded bg-secondary/60 sm:block" />
+              <div className="h-2 w-6 animate-pulse rounded bg-secondary/60" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // If explicitly disabled by user
+  if (!isEnabled) {
+    return (
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 bg-background/40 px-4 backdrop-blur-md">
+        <div className="flex items-center gap-2 px-3">
+          <span className="text-[11px] font-display uppercase tracking-widest text-muted-foreground">
+            Telemetria desativada
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 pl-4 text-[9px] tracking-widest text-muted-foreground uppercase">
+          <span className="relative size-1.5 rounded-full bg-rose-500" />
+          <span className="hidden sm:inline">offline</span>
+        </div>
+      </div>
+    );
+  }
 
   const metrics = stats
     ? [

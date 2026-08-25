@@ -31,26 +31,45 @@ async function apiFetch(endpoint: string, token: string | null, options: Request
   return res.json();
 }
 
+function mapConversation(c: any): Conversation {
+  return {
+    ...c,
+    updatedAt: c.updated_at || c.updatedAt,
+    messageCount: c.message_count ?? c.messageCount ?? 0,
+  };
+}
+
+function mapMessage(m: any): Message {
+  return {
+    ...m,
+    conversationId: m.conversation_id || m.conversationId,
+    createdAt: m.created_at || m.createdAt,
+    imageBase64: m.image_base64 || m.imageBase64,
+  };
+}
+
 export const conversationsService = {
   async listConversations(token: string | null, query = ""): Promise<Conversation[]> {
-    const data: Conversation[] = await apiFetch("/conversations", token);
+    const data: any[] = await apiFetch("/conversations", token);
     
-    // Client-side search for simplicity if backend doesn't support query param yet
+    const mappedData = (data || []).map(mapConversation);
     const q = query.trim().toLowerCase();
-    if (!q) return data || [];
+    if (!q) return mappedData;
     
-    return (data || []).filter(
+    return mappedData.filter(
       (c) => c.title?.toLowerCase().includes(q) || c.preview?.toLowerCase().includes(q)
     );
   },
 
   async createConversation(token: string | null): Promise<Conversation> {
-    return apiFetch("/conversations", token, {
+    const data = await apiFetch("/conversations", token, {
       method: "POST",
     });
+    return mapConversation(data);
   },
 
   async listMessages(token: string | null, id: string): Promise<Message[]> {
-    return apiFetch(`/conversations/${id}/messages`, token);
+    const data: any[] = await apiFetch(`/conversations/${id}/messages`, token);
+    return (data || []).map(mapMessage);
   },
 };

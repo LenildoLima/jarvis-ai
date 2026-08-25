@@ -2,7 +2,7 @@ from fastapi import Header, HTTPException
 from app.services.supabase_service import get_user_from_token
 
 
-async def get_current_user(authorization: str = Header(...)) -> dict:
+def get_current_user(authorization: str = Header(...)) -> dict:
     """
     Dependência do FastAPI: extrai o token do header
     "Authorization: Bearer <token>" e valida com o Supabase.
