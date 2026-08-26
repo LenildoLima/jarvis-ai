@@ -19,9 +19,11 @@ interface ChatState {
   newConversation: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
   send: (content: string, imageBase64?: string | null) => Promise<Message | null>;
+  connectWS: () => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => {
+
   // Listen to WebSocket client status changes
   chatWS.onStatusChange((status) => {
     set({ socketStatus: status });
@@ -99,6 +101,16 @@ export const useChatStore = create<ChatState>((set, get) => {
         if (!handleAuthError(err)) {
           console.error("Failed to load messages:", err);
         }
+      }
+    },
+
+    async connectWS() {
+      const { accessToken } = useAuthStore.getState();
+      if (!accessToken) return;
+      try {
+        await chatWS.getConnectedSocket(accessToken);
+      } catch (err) {
+        console.error("Failed to proactively connect chat WS:", err);
       }
     },
 

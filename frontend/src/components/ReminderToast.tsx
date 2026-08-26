@@ -23,7 +23,7 @@ interface AlertCardProps {
 function AlertCard({ alert, onDismiss }: AlertCardProps) {
   // Auto-dismiss após 10s
   useEffect(() => {
-    const t = setTimeout(() => onDismiss(alert.id), 10_000);
+    const t = setTimeout(() => onDismiss(alert.id), 15_000);
     return () => clearTimeout(t);
   }, [alert.id, onDismiss]);
 

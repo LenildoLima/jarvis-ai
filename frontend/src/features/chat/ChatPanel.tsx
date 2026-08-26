@@ -136,16 +136,26 @@ export function ChatPanel() {
 
   // Resumo Matinal - Gatilho automático único diário
   useEffect(() => {
-    if (socketStatus === "connected" && !thinking && !isSubmittingRef.current) {
+    if (socketStatus === "connected" && !thinking && !loadingMessages && !isSubmittingRef.current) {
       const today = new Date().toLocaleDateString();
       const lastBriefing = localStorage.getItem("jarvis_last_briefing");
       if (lastBriefing !== today) {
-        localStorage.setItem("jarvis_last_briefing", today);
         // Delay suave para não conflitar com a montagem
         setTimeout(() => {
-          void submit("[SISTEMA: GERAR_RESUMO_MATINAL]");
+          // Checamos novamente o socket e se não está enviando nada
+          if (!isSubmittingRef.current && useChatStore.getState().socketStatus === "connected") {
+            localStorage.setItem("jarvis_last_briefing", today);
+            void submit("[SISTEMA: GERAR_RESUMO_MATINAL]");
+          }
         }, 1500);
       }
+    }
+  }, [socketStatus, thinking, loadingMessages]);
+
+  // Conexão proativa do WebSocket ao inicializar o componente
+  useEffect(() => {
+    if (socketStatus === "disconnected") {
+      void useChatStore.getState().connectWS();
     }
   }, [socketStatus]);
 
