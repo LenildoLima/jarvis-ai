@@ -24,17 +24,29 @@ logger = logging.getLogger(__name__)
 _client = AsyncGroq(api_key=settings.GROQ_API_KEY)
 
 
-def _build_system_prompt(display_name: str) -> str:
+def _build_system_prompt(display_name: str, memories: list[str] = None) -> str:
     """
     Monta o prompt de sistema dinamicamente, usando o nome real do
     usuário autenticado (vindo do perfil no Supabase), em vez de um
     nome fixo no código.
     """
     today = date.today().strftime("%A, %d de %B de %Y")
+    
+    memories_text = ""
+    if memories:
+        memories_list = "\n".join([f"- {m}" for m in memories])
+        memories_text = (
+            f"\nFatos Importantes de MEMÓRIA CONTÍNUA já aprendidos sobre {display_name}:\n"
+            f"{memories_list}\n"
+            f"Mantenha essas informações sempre em mente para guiar as respostas, adaptar seu tom "
+            f"e NUNCA perguntar coisas que você já sabe pela lista acima.\n"
+        )
+        
     return (
         f"Hoje é {today}. Use essa data como referência para calcular "
         f"datas relativas mencionadas pelo usuário (amanhã, semana que "
-        f"vem, próxima segunda, etc.) ao criar lembretes.\n\n"
+        f"vem, próxima segunda, etc.) ao criar lembretes.\n"
+        f"{memories_text}\n"
         f"Você é a Bell, uma assistente de IA pessoal futurista. "
         f"Trate o usuário como '{display_name}'. Seja direta, útil e com "
         f"um tom levemente técnico, sem ser fria. Respostas curtas e "
@@ -99,6 +111,11 @@ def _build_system_prompt(display_name: str) -> str:
         "Se o plugin Spotify estiver desativado, ou se o usuário ainda não "
         "tiver conectado a conta do Spotify, avise disso de forma natural, "
         "sugerindo ativar e conectar na tela de Plugins.\n\n"
+        "ATENÇÃO MÁXIMA SOBRE O SPOTIFY: Você NÃO TEM a habilidade de CRIAR ou MONTAR playlists! "
+        "Você SÓ pode buscar coisas que já existem na plataforma ou tocar faixas. "
+        "Se o usuário pedir para você criar, fazer ou montar uma playlist, você deve "
+        "dizer IMEDIATAMENTE a verdade: que você ainda não tem esse poder, mas pode tocar "
+        "as músicas ou as playlists já existentes deles.\n\n"
         "REGRAS DE CONCISÃO EXTREMA (MUITO IMPORTANTE):\n"
         "1. Após reproduzir uma música, NUNCA repita o nome longo da faixa, "
         "nem dê explicações adicionais, se ofereça para trocar ou deseje 'boa audição'. "
@@ -110,6 +127,34 @@ def _build_system_prompt(display_name: str) -> str:
 
 
 _TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "save_memory",
+            "description": (
+                "Salva um fato importante, gosto, preferência rotineira ou pedaço de perfil "
+                "do usuário na MEMÓRIA CONTÍNUA (banco de dados) para todo o sempre. "
+                "Use essa ferramenta silenciosamente SEMPRE que o usuário afirmar "
+                "algum fato estático sobre si, como 'eu gosto de X', 'minha esposa chama Y', "
+                "'trabalho com Z', 'odeio W', 'sonho em Q', etc. "
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": (
+                            "A memória exata a ser guardada. Não grave na primeira "
+                            "pessoa, mas sim na terceira pessoa afirmando o fato. "
+                            "Ex: 'O usuário não gosta de música sertaneja', "
+                            "'O usuário trabalha como desenvolvedor de software'."
+                        ),
+                    }
+                },
+                "required": ["content"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -290,10 +335,10 @@ _TOOLS = [
         "function": {
             "name": "play_spotify",
             "description": (
-                "Toca uma música diretamente no Spotify do usuário. Use APENAS "
+                "Toca uma MÚSICA ESPECÍFICA diretamente no Spotify do usuário. Use APENAS "
                 "quando o usuário pedir expressamente para ouvir, tocar ou "
-                "colocar uma música (ex: 'toca Tomara do Pablo'). Sempre use na busca "
-                "a música EXATA mencionada na mensagem mais recente, não reaproveitando "
+                "colocar uma música (ex: 'toca Tomara do Pablo'). Não toca playlists personalizadas inventadas. "
+                "Sempre use na busca a música EXATA mencionada na mensagem mais recente, não reaproveitando "
                 "músicas citadas antes."
             ),
             "parameters": {
@@ -421,7 +466,15 @@ async def stream_chat_response(
     )
     logger.info("force_search (heurística de palavras-chave) = %s", force_search)
 
-    system_prompt = _build_system_prompt(display_name)
+    # Busca memórias ativas do supabase
+    memories = []
+    if user_id:
+        try:
+            memories = supabase_service.get_user_memories(user_id)
+        except Exception as e:
+            logger.error(f"Erro ao buscar memorias: {e}")
+
+    system_prompt = _build_system_prompt(display_name, memories)
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
     if history:
         # Pega as últimas 10 mensagens apenas, para evitar Payload Too Large (TPM limit do Groq)
@@ -600,6 +653,21 @@ async def stream_chat_response(
                         except Exception as exc:
                             tool_result = f"Erro ao criar o lembrete: {exc}"
                 logger.info("Resultado do create_reminder: %s", tool_result)
+                search_summaries.append(tool_result)
+            elif tool_name == "save_memory":
+                content = args.get("content", "")
+                logger.info(
+                    "Modelo chamou a tool 'save_memory' com content: %r", content
+                )
+                if not user_id:
+                    tool_result = "Erro: impossível salvar memória sem user_id."
+                else:
+                    try:
+                        supabase_service.save_user_memory(user_id, content)
+                        tool_result = f"Sucesso: fato salvo no banco de dados da mente para sempre: '{content}'"
+                    except Exception as exc:
+                        tool_result = f"Erro ao tentar salvar memória: {exc}"
+                logger.info("Resultado do save_memory: %s", tool_result)
                 search_summaries.append(tool_result)
             elif tool_name == "search_spotify":
                 query = args.get("query", "")

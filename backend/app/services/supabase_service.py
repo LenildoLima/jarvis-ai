@@ -218,3 +218,20 @@ def get_spotify_tokens(user_id: str) -> dict | None:
 
 def disconnect_spotify(user_id: str) -> None:
     _client.table("spotify_tokens").delete().eq("user_id", user_id).execute()
+
+def get_user_memories(user_id: str) -> list[str]:
+    """Busca as memorias aprendidas sobre o usuario, ordenadas por criacao."""
+    result = (
+        _client.table("user_memories")
+        .select("content")
+        .eq("user_id", user_id)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    return [row["content"] for row in result.data]
+
+def save_user_memory(user_id: str, content: str) -> None:
+    """Salva uma nova memoria permanente para o usuario."""
+    _client.table("user_memories").insert(
+        {"user_id": user_id, "content": content}
+    ).execute()
