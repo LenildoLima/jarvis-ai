@@ -10,7 +10,7 @@ from groq import AsyncGroq
 from app.core.config import settings
 from app.services.search_service import web_search
 from app.services.weather_service import get_weather
-from app.services.vision_service import analyze_image
+from app.services.vision_service import analyze_image, capture_webcam_and_analyze
 from app.services import supabase_service
 from app.services import spotify_service
 from app.services import system_monitor
@@ -52,16 +52,19 @@ def _build_system_prompt(display_name: str) -> str:
         "falaria em uma conversa — se precisar listar itens, faça isso "
         "dentro do próprio texto (ex: 'primeiro... depois... e por fim...'), "
         "nunca com marcadores visuais.\n\n"
-        "Você TEM acesso real e permanente a cinco ferramentas, disponíveis "
+        "Você TEM acesso real e permanente a seis ferramentas, disponíveis "
         "em toda mensagem desta conversa, não apenas uma vez: busca na web "
         "(web_search), clima em tempo real (get_weather), análise de "
         "imagens anexadas (analyze_image), busca de música no Spotify "
-        "(search_spotify), e tocar música no Spotify (play_spotify). Você "
+        "(search_spotify), tocar música no Spotify (play_spotify), "
+        "controle do sistema do PC (execute_system_command) e também "
+        "tem a habilidade de **tirar uma foto do usuário pela webcam a "
+        "qualquer momento** para 'vê-lo' (capture_and_analyze_webcam). Você "
         "já é capaz de fazer tudo isso agora mesmo, sempre que precisar — "
         "não são funcionalidades hipotéticas nem algo que precisaria ser "
         "implementado. Nunca diga que não consegue buscar informação em "
         "tempo real, que não tem visão computacional/não consegue analisar "
-        "imagens, que não tem acesso ao Spotify, ou explique como 'alguém "
+        "imagens ou ligar a webcam, que não tem acesso ao Spotify, não tem como controlar o PC, ou explique como 'alguém "
         "implementaria' qualquer uma dessas capacidades como se você não "
         "as tivesse — você tem, mesmo quando está apenas conversando sobre "
         "isso sem ter usado a ferramenta ainda na conversa atual. Você pode "
@@ -79,6 +82,9 @@ def _build_system_prompt(display_name: str) -> str:
         "está na etapa de gerar a resposta final em texto para o usuário — "
         "NÃO tente chamar nenhuma ferramenta nessa etapa, apenas responda "
         "com base no que já foi encontrado.\n\n"
+        "Para vídeos no YouTube (ex: 'tocar último vídeo do canal X'), NÃO use web_search. "
+        "Use a ferramenta execute_system_command com a action 'play_youtube_video' (NUNCA use 'search_youtube' se for para abrir/tocar), "
+        "passando os termos de busca no campo 'target'.\n\n"
         "Você também pode criar lembretes/compromissos reais para o "
         "usuário (ex: 'marca uma consulta dia 15 às 14h no consultório "
         "X') usando a ferramenta create_reminder. Sempre confirme de "
@@ -110,9 +116,9 @@ _TOOLS = [
             "name": "web_search",
             "description": (
                 "Busca informações atualizadas na web quando o usuário pergunta "
-                "sobre eventos recentes, notícias, dados em tempo real, preços, "
-                "rankings, classificações ou qualquer assunto que exija informação "
-                "além do conhecimento de treinamento. NÃO use para clima — prefira get_weather."
+                "sobre eventos recentes, notícias, dados em tempo real, preços ou "
+                "informações além do treinamento. NÃO use para clima (use get_weather). "
+                "NÃO use para buscar vídeos no YouTube (use execute_system_command)."
             ),
             "parameters": {
                 "type": "object",
@@ -137,6 +143,31 @@ _TOOLS = [
                     },
                 },
                 "required": ["query", "recency"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "capture_and_analyze_webcam",
+            "description": (
+                "Aciona a webcam do computador local do usuário, captura uma foto "
+                "automática, e analisa a imagem usando o modelo de visao. "
+                "Use esta ferramenta sempre que o usuário pedir para você tentar vê-lo, "
+                "pedir para abrir a câmera ou perguntar sobre algo no mundo físico."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": (
+                            "Instrução ou pergunta sobre a foto capturada da webcam. "
+                            "Ex: 'O que a pessoa está fazendo?' ou 'Quantos dedos estou mostrando?'."
+                        ),
+                    }
+                },
+                "required": ["question"],
             },
         },
     },
@@ -277,6 +308,41 @@ _TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "execute_system_command",
+            "description": (
+                "Executa comandos nativos no sistema Windows do usuário. "
+                "Permite abrir aplicativos e sites, mutar/desmutar áudio, desligar o PC, "
+                "clicar na tela ('browser_click') e tocar vídeos no YouTube ('play_youtube_video' garante que o vídeo "
+                "vai dar play sozinho, NÃO use 'search_youtube' se a ordem for tocar/abrir). NÃO use web_search para YouTube."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["open_app", "open_url", "search_youtube", "play_youtube_video", "browser_click", "mute", "unmute", "shutdown", "cancel_shutdown"],
+                        "description": "A ação a ser executada no PC local.",
+                    },
+                    "target": {
+                        "type": "string",
+                        "description": "Nome do app, URL do site, termos de busca (para YouTube), ou URL a ser aberta (para browser_click)."
+                    },
+                    "element_text": {
+                        "type": "string",
+                        "description": "Texto visível do elemento a clicar na página (apenas para browser_click). Ex: 'Reproduzir' ou 'A REVISÃO DO FUSION'."
+                    },
+                    "delay_minutes": {
+                        "type": "integer",
+                        "description": "Tempo em minutos para desligar o PC (apenas para a ação 'shutdown')."
+                    }
+                },
+                "required": ["action"],
+            },
+        },
+    },
 ]
 
 _SEARCH_KEYWORDS = (
@@ -299,6 +365,21 @@ _SEARCH_KEYWORDS = (
     "música", "músicas", "som", "cantor", "cantores", "cantora", "cantoras",
     "banda", "álbum", "cd", "playlist", "spotify", "ouvir",
 )
+
+_SYSTEM_COMMAND_PREFIXES = (
+    "abre ", "abre o ", "abre a ",
+    "abrir o ", "abrir a ",
+    "desliga ", "desligar o ",
+    "muta o ", "muta ",
+    "desmuta",
+    "fecha o ", "fecha a ",
+    "cancela o desligamento",
+)
+
+
+def _looks_like_system_command(text: str) -> bool:
+    lowered = text.lower()
+    return any(lowered.startswith(kw) or lowered.startswith(f"bell, {kw}") for kw in _SYSTEM_COMMAND_PREFIXES)
 
 
 def _looks_like_factual_query(text: str) -> bool:
@@ -333,13 +414,24 @@ async def stream_chat_response(
     logger.info("Imagem anexada manualmente? %s", bool(image_base64))
 
     is_morning_briefing = user_message.strip() == "[SISTEMA: GERAR_RESUMO_MATINAL]"
-    force_search = _looks_like_factual_query(user_message) and not is_morning_briefing
+    force_search = (
+        _looks_like_factual_query(user_message) 
+        and not is_morning_briefing
+        and not _looks_like_system_command(user_message)
+    )
     logger.info("force_search (heurística de palavras-chave) = %s", force_search)
 
     system_prompt = _build_system_prompt(display_name)
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
     if history:
-        messages.extend(history)
+        # Pega as últimas 10 mensagens apenas, para evitar Payload Too Large (TPM limit do Groq)
+        messages.extend(history[-10:])
+
+    # Se a palavra 'youtube' estiver no prompt, oculta temporariamente a ferramenta web_search
+    # para obrigar o modelo a usar a automação do PC (execute_system_command) em vez do Google.
+    available_tools = _TOOLS
+    if "youtube" in user_message.lower():
+        available_tools = [t for t in _TOOLS if t["function"]["name"] != "web_search"]
 
     # Resolve conteúdo do usuário com possíveis injeções
     user_content = user_message
@@ -410,7 +502,7 @@ async def stream_chat_response(
         first_response = await _client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=messages,
-            tools=_TOOLS,
+            tools=available_tools,
             tool_choice=tool_choice,
             stream=False,
         )
@@ -423,7 +515,7 @@ async def stream_chat_response(
         first_response = await _client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=messages,
-            tools=_TOOLS,
+            tools=available_tools,
             tool_choice="auto",
             stream=False,
         )
@@ -459,6 +551,16 @@ async def stream_chat_response(
                 logger.info("Resultado bruto da analyze_image: %s", tool_result)
                 search_summaries.append(
                     f"Análise da imagem (pergunta: {question}):\n{tool_result}"
+                )
+            elif tool_name == "capture_and_analyze_webcam":
+                question = args.get("question", "Descreva o que aparece na webcam.")
+                logger.info(
+                    "Modelo chamou a tool 'capture_and_analyze_webcam' com question: %r", question
+                )
+                tool_result = await capture_webcam_and_analyze(question)
+                logger.info("Resultado bruto da capture_and_analyze_webcam: %s", tool_result)
+                search_summaries.append(
+                    f"Visão pela Webcam (pergunta interna: {question}):\n{tool_result}"
                 )
             elif tool_name == "create_reminder":
                 title = args.get("title", "Compromisso")
@@ -562,6 +664,18 @@ async def stream_chat_response(
                 search_summaries.append(
                     f"Query: {query}\nResultado:\n{tool_result}"
                 )
+            elif tool_name == "execute_system_command":
+                action = args.get("action", "")
+                target = args.get("target")
+                delay_minutes = args.get("delay_minutes", 0)
+                logger.info(
+                    "Modelo chamou a tool 'execute_system_command': action=%r target=%r delay=%r", 
+                    action, target, delay_minutes
+                )
+                from app.services import system_control
+                tool_result = system_control.execute_command(action, target, delay_minutes)
+                logger.info("Resultado do execute_system_command: %s", tool_result)
+                search_summaries.append(f"Ação no PC local concluída com sucesso:\n{tool_result}")
             else:
                 logger.info("Tool desconhecida chamada: %r — ignorando.", tool_name)
 
@@ -579,14 +693,21 @@ async def stream_chat_response(
         logger.info(
             "Modelo NÃO chamou nenhuma tool — respondendo diretamente sem busca."
         )
+        # Se o modelo já tem conteúdo de texto na primeira resposta, usamos diretamente
+        # sem fazer uma segunda chamada (que pode gerar o erro 'Tool choice is none')
+        direct_content = first_message.content or ""
+        if direct_content.strip():
+            logger.info("Usando conteúdo direto da primeira resposta (sem segunda chamada).")
+            yield _strip_markdown(direct_content)
+            return
 
-    # A chamada final NUNCA deve permitir tool calling — a API da Groq
-    # às vezes falha com "Tool choice is none, but model called a tool"
-    # se enviarmos tools=_TOOLS com tool_choice="none".
-    # O mais seguro é simplesmente não enviar o parâmetro tools.
+    # Chamada final de streaming — somente quando ferramentas foram usadas.
+    # Passamos tools + tool_choice='none' para evitar o erro 'Tool choice is none, but model called a tool'.
     stream = await _client.chat.completions.create(
         model=settings.GROQ_MODEL,
         messages=messages,
+        tools=available_tools,
+        tool_choice="none",
         stream=True,
     )
 

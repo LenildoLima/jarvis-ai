@@ -11,7 +11,7 @@ async def system_stats_websocket(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            stats = get_system_stats(settings.SYSTEM_STATS_INTERVAL)
+            stats = await asyncio.to_thread(get_system_stats, settings.SYSTEM_STATS_INTERVAL)
             await websocket.send_json(stats.model_dump())
             await asyncio.sleep(settings.SYSTEM_STATS_INTERVAL)
     except WebSocketDisconnect:

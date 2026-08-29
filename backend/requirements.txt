@@ -9,4 +9,5 @@ supabase>=2.9.0
 psutil>=6.1.0
 python-dotenv>=1.0.1
 websockets>=13.1
-
+playwright>=1.41.0
+opencv-python>=4.8.0
